@@ -1,74 +1,86 @@
-patches-own [terrain-type move-multiplier]
+patches-own [terrain-type move-multiplier] ;Each patch (grid cell) has a terrain type and a movement multiplier that affects agent movement.
 
+; breed: different agent types
 breed [soldiers soldier]
 breed [artilleries artillery]
 breed [drones drone]
 breed [vehicles vehicle]
 
-soldiers-own [soldiers-speed setting-up-pontoon?]
+; properties for each breed
+soldiers-own [soldiers-speed setting-up-pontoon? state target-bridge target-shore goal-reached has-target head-x head-y]
 artilleries-own [artillery-range accuracy]
 drones-own [detection-probability detection-timer increasing-accuracy?]
 vehicles-own [vehicle-speed]
 
+; global variables
+globals [counter bridges-list site-list]
+; counter: for counting soldiers that successfully passed the river
+; bridges-list: for saving existing bridges coordinate, west point and east point
+; site-list: for saving available pontoon construction site
+
 to setup
   clear-all
-  resize-world 0 205 0 385
+  set counter 0
   set-patch-size 1
+  resize-world 0 277 0 525
+  print "setting bridge-list"
+  ; hard code permanent bridges
+  set bridges-list [
+    [[109 403] [123 391]] ; bridge 1
+    [[107 243] [127 241]]
+    [[115 44] [134 38]]
+  ]
+  print "setting terrain"
   setup-terrain
+  print "setting actors"
   setup-actors
+
   reset-ticks
+  print "Setup complete"
 end
+
 
 to go
   if not any? soldiers [stop]
+
   move-soldiers
-  detect-pontoons
-  fire-artillery
+
+  ;detect-pontoons
+  ;fire-artillery
   tick
 end
 
 to setup-terrain
-  import-pcolors "Irpin.png"
-  ask patches [
-    let c pcolor
-    if c = gray [
-      set pcolor gray
-      set terrain-type "road"
-      set move-multiplier 1.5
-    ]
-    if c = brown [
-      set pcolor brown
-      set terrain-type "dirt-trail"
-      set move-multiplier 1.0
-    ]
-    if c = blue [
-      set pcolor blue
-      set terrain-type "water"
-      set move-multiplier 0
-    ]
-    if c = black [
-      set pcolor black
-      set terrain-type "bridge"
-      set move-multiplier 1.5
-    ]
-    if (c != gray and c != brown and c != blue and c != black) [
-      set move-multiplier 1
-    ]
-  ]
-end
+  import-pcolors "Irpin_pixel_2.png"  ; Load the map image into patches
 
-to move-agent
-  ask turtles [
-    let next-patch patch-ahead 1
-    if next-patch != nobody [
-      let speed [move-multiplier] of next-patch
-      fd speed
+  ;; Define terrain type mapping (rounded pcolor -> terrain-type, move-multiplier)
+  let terrain-map [
+    [36 "woodland" 0.7]
+    [107 "water" 0]
+    [0 "bridge" 1.5]
+    [10 "open-field" 1.0]
+    [44 "east-side" 1.0]
+  ]
+
+  ask patches [
+    let c round pcolor  ;; Round to avoid floating-point issues
+
+    ;; Find matching terrain type and move multiplier from terrain-map
+    let match filter [entry -> first entry = c] terrain-map
+
+    if not empty? match [
+      set terrain-type item 1 first match
+      set move-multiplier item 2 first match
+    ]
+    if empty? match [
+      set terrain-type "unknown"
+      set move-multiplier 1.0
     ]
   ]
 end
 
 to setup-actors
-  create-soldiers 7000 [
+  create-soldiers 700 [
     set shape "person"
     set color red
     let spawn-point one-of (list (list 80 327) (list 67 300) (list 14 192))
@@ -77,73 +89,156 @@ to setup-actors
     setxy spawn-x spawn-y
     set soldiers-speed 4
     set setting-up-pontoon? false
+    set state "searching"
+    set has-target false
   ]
 
-  create-artilleries 20 [
-    set color blue
-    let artillery-positions (list (list 136 315) (list 98 273) (list 120 167) (list 117 30))
-    let a-position one-of artillery-positions
-    setxy first a-position last a-position
-    set artillery-range 15
-    set accuracy 0.5
-    set size 10
-  ]
-
-  create-drones 5 [
-    set color cyan
-    setxy random-xcor random-ycor ;; adjust for realistic spawn points
-    set detection-probability 0.75
-    set detection-timer 45
-    set size 10
-    set increasing-accuracy? false
-  ]
 end
+
 
 to move-soldiers
   ask soldiers [
-    let bridges patches with [
-      pxcor = 93 and pycor = 283 or
-      pxcor = 87 and pycor = 197 or
-      pxcor = 89 and pycor = 289
-    ]
-    let closest-bridge min-one-of bridges [distance myself]
-    if closest-bridge != nobody [
-      face closest-bridge
-      let terrain-multiplier [move-multiplier] of patch-here
-      fd (soldiers-speed * terrain-multiplier)
-    ]
-    ;; place holder to implement bottleneck logic at bridges
-  ]
-end
 
-to detect-pontoons
-  ask drones [
-    if detection-timer <= 0 [
-      let found-pontoon? any? soldiers with [setting-up-pontoon? = true]
-      if found-pontoon? [
-        set increasing-accuracy? true
-        ask artilleries [set accuracy accuracy + 0.2]
+    ;; State: Searching for a way to cross
+    if state = "searching" [
+      if not empty? bridges-list [
+        let closest-bridge nobody
+        let min-distance 999999  ;; A large initial value
+
+        ;; Loop through each bridge and find the closest west shore point
+        foreach bridges-list [ bridge ->
+          let wx first first bridge  ;; Extract x of west shore
+          let wy last first bridge   ;; Extract y of west shore
+          let d distancexy wx wy     ;; Compute distance
+
+          if d < min-distance [
+            set min-distance d
+            set closest-bridge bridge ;; Store the closest bridge
+          ]
+        ]
+        if closest-bridge != nobody [
+          set target-bridge first closest-bridge ;; Extract west shore point
+          set state "heading-bridge"
+        ]
+        if closest-bridge = nobody [
+          let closest-shore nobody
+          set target-shore closest-shore
+          set state "heading-shore"
+        ]
       ]
-      set detection-timer 45
     ]
-    set detection-timer detection-timer - 1
+
+    ;; State: Moving towards the west shore of the bridge
+    if state = "heading-bridge" [
+      if not has-target [
+        set head-x first target-bridge  ;; Extract x of west shore
+        set head-y last target-bridge   ;; Extract y of west shore
+
+        ; Move towards the west point of the bridge
+        face patch head-x head-y
+        set has-target true
+      ]
+      fd 1
+
+      ; If within a radius of 2 patches from the west point, start crossing
+      if distancexy head-x head-y <= 2 [
+        set state "crossing-bridge"
+        set has-target false
+      ]
+    ]
+
+
+    ;; State: Moving across the bridge to the east shore
+    if state = "crossing-bridge" [
+      if not has-target [
+        let east-point nobody
+
+        ;; Find the east shore point of the bridge matching target-bridge
+        foreach bridges-list [ bridge ->
+          if first bridge = target-bridge [
+            set east-point last bridge  ;; Extract the east shore point
+          ]
+        ]
+
+        set head-x first east-point
+        set head-y last east-point
+        ;face east-point
+        face patch head-x head-y
+        set has-target true
+      ]
+      fd 1
+      if distancexy head-x head-y <= 2 [
+        set state "heading-east-side"
+        set has-target false
+      ]
+    ]
+
+    ;; State: Moving towards the final east-side goal
+    if state = "heading-east-side" [
+      if not has-target [
+        let target-east-side min-one-of patches with [terrain-type = "east-side"] [distance myself]
+
+        set head-x [pxcor] of target-east-side
+        set head-y [pycor] of target-east-side
+        face patch head-x head-y
+      ]
+      fd 1
+      if distancexy head-x head-y <= 1 [
+        set counter counter + 1
+        set goal-reached true
+        die  ;; Remove soldier from the simulation
+      ]
+    ]
+
+    ;; State: Moving to a shore to build a bridge
+    if state = "heading-shore" [
+      if not has-target [
+        ; insert codes here
+      ]
+    ]
+
+    ;; State: Building a bridge (Placeholder for future logic)
+    if state = "building-bridge" [
+      start-building-bridge
+    ]
   ]
 end
 
-to fire-artillery
-  ask artilleries [
-    let target one-of soldiers in-radius artillery-range
-    if target != nobody [
-      if random-float 1 < accuracy [ask target [die]]
-    ]
+to start-building-bridge
+  ;; Placeholder: Write bridge construction logic here later
+end
+
+
+; for checking patches assignment
+to check-pcolor
+  show [pcolor] of patch mouse-xcor mouse-ycor
+end
+
+to check-terrain
+  ask n-of 10 patches [  ;; Pick 10 random patches to check
+    show (word "Patch (" pxcor "," pycor ") - " terrain-type " | pcolor: " pcolor)
+  ]
+end
+
+to check-patch
+  ask patch (round mouse-xcor) (round mouse-ycor) [
+    show (word "Patch (" pxcor "," pycor ") - " terrain-type " | pcolor: " pcolor)
+  ]
+end
+
+to check-soldiers-state
+  let random-soldiers n-of 10 soldiers  ;; Select 10 random soldiers
+
+  ask random-soldiers [
+    print (word "Soldier ID: " who " | State: " state)  ;; Print soldier ID and their current state
   ]
 end
 @#$#@#$#@
 GRAPHICS-WINDOW
 488
 95
-702
-490
+774
+630
 -1
 -1
 1.0
@@ -157,14 +252,14 @@ GRAPHICS-WINDOW
 1
 1
 0
-205
+277
 0
-385
+525
 0
 0
 1
 ticks
-30.0
+60.0
 
 BUTTON
 381
@@ -191,6 +286,34 @@ BUTTON
 Go
 go
 T
+1
+T
+OBSERVER
+NIL
+NIL
+NIL
+NIL
+1
+
+MONITOR
+160
+241
+348
+286
+Soldiers reached goal (east of river)
+counter
+0
+1
+11
+
+BUTTON
+283
+145
+347
+179
+Clear
+clear-all
+NIL
 1
 T
 OBSERVER
