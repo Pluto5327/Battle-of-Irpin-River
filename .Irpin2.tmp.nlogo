@@ -127,8 +127,8 @@ to setup-actors
   create-drones 5 [
     set color cyan
     setxy random-xcor random-ycor ;; adjust for realistic spawn points
-    ; set detection-probability 0.75
-    ; set detection-timer 45
+    ;set detection-probability 0.75
+    set detection-timer 45
     set size 10
     set increasing-accuracy? false
     hide-turtle
