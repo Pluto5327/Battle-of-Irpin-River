@@ -1,109 +1,104 @@
-;; Russians do not attack(?)
-;; Need to Define when it starts
+patches-own [terrain-type move-multiplier] ;Each patch (grid cell) has a terrain type and a movement multiplier that affects agent movement.
 
-
-;; Globals
-globals [ soldier-counter ]
-
-
-;; Property of the Patch
-patches-own [terrain-type move-multiplier]
-
-
-;; Define Agents
+; breed: different agent types
 breed [soldiers soldier]
 breed [artilleries artillery]
 breed [drones drone]
 breed [vehicles vehicle]
 
-;; Common Turtles Property
-turtles-own [ explosion-timer is-explosion-marker? ]
-
-soldiers-own [soldiers-speed setting-up-pontoon?]
+; properties for each breed
+soldiers-own [soldiers-speed setting-up-pontoon? state target-bridge target-shore goal-reached has-target head-x head-y tx ty]
 artilleries-own [artillery-range accuracy]
 drones-own [detection-probability detection-timer increasing-accuracy?]
 vehicles-own [vehicle-speed]
 
+; global variables
+globals [counter bridges-list site-list bridge-timers build-duration construct-team]
+; counter: for counting soldiers that successfully passed the river
+; bridges-list: for saving existing bridges coordinate, west point and east point
+; site-list: for saving available pontoon construction site
+; bridge-timers:
+; build-duration: build time for each pontoon
 
-;; Setup Procedure
 to setup
   clear-all
-
-  ;; 1 Pixel =  50m * 50m ?
-  ;; I would like to resize this world
-  resize-world 0 205 0 385
+  set counter 0
   set-patch-size 1
+  resize-world 0 277 0 525
+  print "setting bridge-list"
+  ; hard code permanent bridges
+  set bridges-list [
+    [[109 403] [123 391]] ; bridge 1
+    [[107 243] [127 241]]
+    [[115 44] [134 48]]
+  ]
+  ; hard code pontoon sites
+  set site-list [
+    [[109 343] [120 344]] ; site 1
+    [[108 293] [117 297]]
+    [[105 198] [115 198]]
+    [[119 125] [127 126]]
+    [[117 62] [126 62]]
+  ]
+  ; set parameters
+  set build-duration 1000
+  set construct-team 30
+  set bridge-timers []
+
+  print "setting terrain"
   setup-terrain
+  print "setting actors"
   setup-actors
-  set soldier-counter count soldiers
+
   reset-ticks
+  print "Setup complete"
 end
 
 
-;; Process Procedure
 to go
-  ;;
-  ask turtles with [ is-explosion-marker? = true ] [
-    set explosion-timer explosion-timer - 1
-    if explosion-timer <= 0 [ die ]
-  ]
-  set soldier-counter count soldiers
-
   if not any? soldiers [stop]
+
   move-soldiers
-  detect-pontoons
-  fire-artillery
+  update-bridge-timers
+
+  ;detect-pontoons
+  ;fire-artillery
   tick
 end
 
-
-;; Terrain Settings
 to setup-terrain
-  import-pcolors "Irpin.png"
+  import-pcolors "Irpin_pixel_2.png"  ; Load the map image into patches
+
+  ;; Define terrain type mapping (rounded pcolor -> terrain-type, move-multiplier)
+  let terrain-map [
+    [36 "woodland" 0.7]
+    [107 "water" 0]
+    [0 "bridge" 1.0]
+    [10 "open-field" 1.0]
+    [44 "east-side" 1.0]
+    [red "destroyed" 0]
+    [yellow "pontoon" 1.0]
+  ]
+
   ask patches [
-    let c pcolor
-    if c = gray [
-      set pcolor gray
-      set terrain-type "road"
-      set move-multiplier 1.5
+    let c round pcolor  ;; Round to avoid floating-point issues
+
+    ;; Find matching terrain type and move multiplier from terrain-map
+    let match filter [entry -> first entry = c] terrain-map
+
+    if not empty? match [
+      set terrain-type item 1 first match
+      set move-multiplier item 2 first match
     ]
-    if c = brown [
-      set pcolor brown
-      set terrain-type "dirt-trail"
+    if empty? match [
+      set terrain-type "unknown"
       set move-multiplier 1.0
     ]
-    if c = blue [
-      set pcolor blue
-      set terrain-type "water"
-      set move-multiplier 0
-    ]
-    if c = black [
-      set pcolor black
-      set terrain-type "bridge"
-      set move-multiplier 1.5
-    ]
-    if (c != gray and c != brown and c != blue and c != black) [
-      set move-multiplier 1
-    ]
   ]
 end
 
-
-;; Move Agents
-to move-agent
-  ask turtles [
-    let next-patch patch-ahead 1
-    if next-patch != nobody [
-      let speed [move-multiplier] of next-patch
-      fd speed
-    ]
-  ]
-end
-
-
-;; Setup Actors
 to setup-actors
-  create-soldiers 7000 [
+  create-soldiers 700 [
     set shape "person"
     set color red
     let spawn-point one-of (list (list 80 327) (list 67 300) (list 14 192))
@@ -112,118 +107,316 @@ to setup-actors
     setxy spawn-x spawn-y
     set soldiers-speed 4
     set setting-up-pontoon? false
+    set state "searching"
+    set has-target false
   ]
 
-  create-artilleries 20 [
-    set color blue
-    let artillery-positions (list (list 136 315) (list 98 273) (list 120 167) (list 117 30))
-    let a-position one-of artillery-positions
-    setxy first a-position last a-position
-    set artillery-range 1400
-    set accuracy 0.5
-    set size 10
-  ]
-
-  create-drones 5 [
-    set color cyan
-    setxy random-xcor random-ycor ;; adjust for realistic spawn points
-    ;set detection-probability 0.75
-    set detection-timer 45
-    set size 10
-    set increasing-accuracy? false
-    hide-turtle
-  ]
 end
 
-
-;; Move Soldiers
+;; ========================== on tick actions ===========================
 to move-soldiers
   ask soldiers [
-    let bridges patches with [
-      pxcor = 93 and pycor = 283 or
-      pxcor = 87 and pycor = 197 or
-      pxcor = 89 and pycor = 289
+
+    ;; State: Searching for a way to cross
+    if state = "searching" [
+      if not empty? bridges-list [
+        let closest-bridge nobody
+        let min-distance 999999  ;; A large initial value
+
+        ;; Loop through each bridge and find the closest west shore point
+        foreach bridges-list [ bridge ->
+          let wx first first bridge  ;; Extract x of west shore
+          let wy last first bridge   ;; Extract y of west shore
+          let d distancexy wx wy     ;; Compute distance
+
+          if d < min-distance [
+            set min-distance d
+            set closest-bridge bridge ;; Store the closest bridge
+          ]
+        ]
+        if closest-bridge != nobody [
+          set target-bridge first closest-bridge ;; Extract west shore point
+          set state "heading-bridge"
+        ]
+      ]
+      if empty? bridges-list [
+        let closest-shore nobody
+        let min-distance 999999
+
+        foreach site-list [ site ->
+          let wx first first site
+          let wy last first site
+          let d distancexy wx wy
+
+          if d < min-distance [
+            set min-distance d
+            set closest-shore site
+            set tx first last site
+            set ty last last site
+          ]
+        ]
+        if closest-shore != nobody [
+          set target-shore first closest-shore
+          set state "heading-shore"
+        ]
+      ]
     ]
-    let closest-bridge min-one-of bridges [distance myself]
-    if closest-bridge != nobody [
-      face closest-bridge
-      let terrain-multiplier [move-multiplier] of patch-here
-      fd (soldiers-speed * terrain-multiplier)
+
+    ;; State: Moving towards the west shore of the bridge
+    if state = "heading-bridge" [
+      if not has-target [
+        set head-x first target-bridge  ;; Extract x of west shore
+        set head-y last target-bridge   ;; Extract y of west shore
+
+        ; Move towards the west point of the bridge
+        face patch head-x head-y
+        set has-target true
+      ]
+      fd 1
+
+      ; If within a radius of 2 patches from the west point, start crossing
+      if distancexy head-x head-y <= 2 [
+        set state "crossing-bridge"
+        set has-target false
+      ]
     ]
-    ;; place holder to implement bottleneck logic at bridges
+
+
+    ;; State: Moving across the bridge to the east shore
+    if state = "crossing-bridge" [
+      if not has-target [
+        let east-point nobody
+
+        ;; Find the east shore point of the bridge matching target-bridge
+        foreach bridges-list [ bridge ->
+          if first bridge = target-bridge [
+            set east-point last bridge  ;; Extract the east shore point
+          ]
+        ]
+
+        set head-x first east-point
+        set head-y last east-point
+        ;face east-point
+        face patch head-x head-y
+        set has-target true
+      ]
+      fd 1
+      if distancexy head-x head-y <= 2 [
+        set state "heading-east-side"
+        set has-target false
+      ]
+    ]
+
+    ;; State: Moving towards the final east-side goal
+    if state = "heading-east-side" [
+      if not has-target [
+        let target-east-side min-one-of patches with [terrain-type = "east-side"] [distance myself]
+
+        set head-x [pxcor] of target-east-side
+        set head-y [pycor] of target-east-side
+        face patch head-x head-y
+      ]
+      fd 1
+      if distancexy head-x head-y <= 1 [
+        set counter counter + 1
+        set goal-reached true
+        die  ;; Remove soldier from the simulation
+      ]
+    ]
+
+    ;; State: Moving to a shore to build a bridge
+    if state = "heading-shore" [
+      if not has-target [
+        set head-x first target-shore  ;; Extract x of west shore
+        set head-y last target-shore   ;; Extract y of west shore
+
+        ; Move towards the west point of the bridge
+        face patch head-x head-y
+        set has-target true
+      ]
+      fd 1
+
+      ; If within a radius of 2 patches from the west point, start crossing
+      if distancexy head-x head-y <= 2 [
+        set state "building-bridge"
+        set has-target false
+      ]
+    ]
+
+    ;; State: Building a bridge (Placeholder for future logic)
+    if state = "building-bridge" [
+      let nearby-troops count (other soldiers in-radius 3 with [state = "building-bridge"])
+      if nearby-troops >= construct-team [
+        let bridge-data (list (list head-x head-y) (list tx ty))
+        let existing-entry filter [entry -> first entry = bridge-data] bridge-timers
+
+        if empty? existing-entry [
+          set bridge-timers lput (list bridge-data ticks) bridge-timers
+        ]
+      ]
+    ]
   ]
 end
 
+to update-bridge-timers
+  let new-timers []
 
-;; Pontoon Detection Process
-;; Assume every time is 1 minute
-;; 45 +- 15
-to detect-pontoons
-  ask drones [
-    if detection-timer <= 0 [
-      ;; detection-timer が切れたら、必ず検出状態にする
-      set increasing-accuracy? true
-      ask artilleries [ set accuracy accuracy + 0.2 ]
-      set detection-timer (30 + random-float 30)
+  foreach bridge-timers [ entry ->
+    let bridge-data first entry  ;; Should be [[wx wy] [ex ey]]
+    let start-time last entry
+
+    ifelse (ticks - start-time) >= build-duration [
+      ;; Extract shore coordinates correctly
+      let wx first first bridge-data
+      let wy last first bridge-data
+      let ex first last bridge-data
+      let ey last last bridge-data
+
+      ;; Draw the bridge
+      draw-bridge wx wy ex ey
+
+      ;; Remove this bridge data from bridge-timers
+      set bridge-timers filter [timer-entry ->
+        first first first timer-entry != wx or last first first timer-entry != wy ;; Keep only bridges not matching wx, wy
+      ] bridge-timers
+
+      ;; Remove from site-list and add to bridges-list
+      set site-list remove bridge-data site-list
+      set bridges-list lput bridge-data bridges-list
+
+      print (word "Bridge built at: " bridge-data)
+      ; change soldiers around to state: crossing-bridge
+      ask soldiers with [state = "building-bridge" and distancexy wx wy <= 4] [
+        set state "crossing-bridge"  ;; Change to the state when bridge construction is done
+        set head-x ex
+        set head-y ey
+        face patch head-x head-y
+        set has-target true
+      ]
+
+    ] [
+      ;; Keep unfinished bridge timers
+      set new-timers lput entry new-timers
     ]
-    set detection-timer detection-timer - 1
   ]
+
+  ;; Update the global list with ongoing timers
+  set bridge-timers new-timers
 end
 
 
 
+;; ===================================== functions =====================================
+to check-pcolor
+  show [pcolor] of patch mouse-xcor mouse-ycor
+end
 
-;; 120mm mortar were used (82mm were also used but just assume 120mm were used.)
-;; 4-6 Shots/min
-
-;; To simplify lets assume that mortar fires with concentration at the time when the construction is detected.
-;; In reality, 10-20 shots are needed to be assumed
-;; Lethal Area 75m
-to fire-artillery
-  if not any? drones with [ increasing-accuracy? = true ] [ stop ]
-
-  let detecting-drone one-of drones with [ increasing-accuracy? = true ]
-
-  let target-patch [ patch-here ] of detecting-drone
-
-  let affected-patches patches with [ distance target-patch <= 1 ]
-
-  ask affected-patches [
-    ask soldiers-here [ die ]
-  ]
-
-  ask target-patch [
-    sprout 1 [
-      set shape "circle"
-      set size 5
-      set color yellow
-      set explosion-timer 5
-      set is-explosion-marker? true
-    ]
-  ]
-
-  ask drones with [ increasing-accuracy? = true ] [
-    set increasing-accuracy? false
+to check-terrain
+  ask n-of 10 patches [  ;; Pick 10 random patches to check
+    show (word "Patch (" pxcor "," pycor ") - " terrain-type " | pcolor: " pcolor)
   ]
 end
 
+to check-patch
+  ask patch (round mouse-xcor) (round mouse-ycor) [
+    show (word "Patch (" pxcor "," pycor ") - " terrain-type " | pcolor: " pcolor)
+  ]
+end
 
+to check-soldiers-state
+  let random-soldiers n-of 10 soldiers  ;; Select 10 random soldiers
 
+  ask random-soldiers [
+    print (word "Soldier ID: " who " | State: " state)  ;; Print soldier ID and their current state
+  ]
+end
 
+to destroy-all-bridges
+  foreach bridges-list [ bridge ->
+    let wx first first bridge  ;; Extract wx (west shore x-coordinate)
+    let wy last first bridge   ;; Extract wy (west shore y-coordinate)
+    let ex first last bridge  ;; Extract ex (east shore x-coordinate)
+    let ey last last bridge   ;; Extract ey (east shore y-coordinate)
 
+    ;; Destroy around the west shore (wx, wy)
+    destroy-around wx wy
 
+    ;; Destroy around the east shore (ex, ey)
+    destroy-around ex ey
+  ]
+  set bridges-list []
+end
 
+to destroy-around [cx cy]
+  ;; Loop through all patches and check distance
+  ask patches [
+    if distancexy cx cy <= 15 and terrain-type = "bridge" [
+      set pcolor red                ;; Set patch color to red
+      set terrain-type "destroyed"   ;; Set terrain type to "destroyed"
+      set move-multiplier 0          ;; Example of setting the move multiplier to zero
+    ]
+  ]
+end
 
+to draw-all-bridges
+  foreach site-list [ site ->
+    let wx first first site
+    let wy last first site
+    let ex first last site
+    let ey last last site
+
+    draw-bridge wx wy ex ey
+
+    ;; Move the drawn bridge to bridges-list
+    set bridges-list lput site bridges-list
+  ]
+  ;; Remove drawn bridges from site-list
+  set site-list filter [site -> not member? site bridges-list] site-list
+
+  print "pontoon bridge (yellow) drawn"
+end
+
+to draw-bridge [wx wy ex ey]
+  let width 3  ;; Half-width of the bridge (so full width = 10)
+
+  let bx (ex - wx)
+  let by (ey - wy)
+  let dist_temp sqrt (bx * bx + by * by)
+
+  ;; Normalize direction vector
+  let unit-x bx / dist_temp
+  let unit-y by / dist_temp
+
+  ;; Perpendicular vector for width
+  let perp-x -1 * unit-y
+  let perp-y unit-x
+
+  ;; Iterate along the bridge path
+  foreach (range 0 dist_temp 0.5) [ i ->
+    let cx (wx + i * unit-x)
+    let cy (wy + i * unit-y)
+
+    ;; Color the patches in a 10-wide strip
+    foreach (range (-1 * width) width 0.5) [ j ->
+      let px (cx + j * perp-x)
+      let py (cy + j * perp-y)
+      ask patch round px round py [
+        set pcolor yellow
+        set terrain-type "pontoon"
+      ]
+    ]
+  ]
+end
 
 @#$#@#$#@
 GRAPHICS-WINDOW
-488
-95
-702
-490
+210
+10
+647
+448
 -1
 -1
-1.0
+13.0
 1
 10
 1
@@ -233,10 +426,10 @@ GRAPHICS-WINDOW
 1
 1
 1
-0
-205
-0
-385
+-16
+16
+-16
+16
 0
 0
 1
@@ -244,12 +437,12 @@ ticks
 30.0
 
 BUTTON
-381
-92
-447
-125
-Setup
-setup
+78
+104
+141
+137
+NIL
+NIL
 NIL
 1
 T
@@ -259,34 +452,6 @@ NIL
 NIL
 NIL
 1
-
-BUTTON
-384
-140
-447
-173
-Go
-go
-T
-1
-T
-OBSERVER
-NIL
-NIL
-NIL
-NIL
-1
-
-MONITOR
-241
-241
-372
-286
-Remaining Soldiers
-soldier-counter
-17
-1
-11
 
 @#$#@#$#@
 ## WHAT IS IT?

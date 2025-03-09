@@ -127,8 +127,8 @@ to setup-actors
   create-drones 5 [
     set color cyan
     setxy random-xcor random-ycor ;; adjust for realistic spawn points
-    ; set detection-probability 0.75
-    ; set detection-timer 45
+    set detection-probability 0.75
+    set detection-timer 45
     set size 10
     set increasing-accuracy? false
     hide-turtle
@@ -161,10 +161,10 @@ end
 to detect-pontoons
   ask drones [
     if detection-timer <= 0 [
-      ;; detection-timer が切れたら、必ず検出状態にする
+
       set increasing-accuracy? true
-      ask artilleries [ set accuracy accuracy + 0.2 ]
-      set detection-timer (30 + random-float 30)
+      ask artilleries [ set accuracy accuracy + 1 ]
+      set detection-timer (0 + random-float 30)
     ]
     set detection-timer detection-timer - 1
   ]
@@ -180,40 +180,41 @@ end
 ;; In reality, 10-20 shots are needed to be assumed
 ;; Lethal Area 75m
 to fire-artillery
+
   if not any? drones with [ increasing-accuracy? = true ] [ stop ]
 
-  let detecting-drone one-of drones with [ increasing-accuracy? = true ]
+  ask artilleries [
 
-  let target-patch [ patch-here ] of detecting-drone
+    let best-patch nobody
+    let best-count -1
 
-  let affected-patches patches with [ distance target-patch <= 1 ]
+    ask patches in-radius artillery-range [
+      let soldier-count count soldiers-here
+      if soldier-count > best-count [
+        set best-count soldier-count
+        set best-patch self
+      ]
+    ]
 
-  ask affected-patches [
-    ask soldiers-here [ die ]
-  ]
+    if best-patch != nobody [
+      let affected-patches patches with [ distance best-patch <= 1 ]
 
-  ask target-patch [
-    sprout 1 [
-      set shape "circle"
-      set size 5
-      set color yellow
-      set explosion-timer 5
-      set is-explosion-marker? true
+      ask affected-patches [
+        ask soldiers-here [ die ]
+      ]
+
+      ask best-patch [
+        sprout 1 [
+          set shape "circle"
+          set size 5
+          set color yellow
+          set explosion-timer 5
+          set is-explosion-marker? true
+        ]
+      ]
     ]
   ]
-
-  ask drones with [ increasing-accuracy? = true ] [
-    set increasing-accuracy? false
-  ]
 end
-
-
-
-
-
-
-
-
 
 @#$#@#$#@
 GRAPHICS-WINDOW
