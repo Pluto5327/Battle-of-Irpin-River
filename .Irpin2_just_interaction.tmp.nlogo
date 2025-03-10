@@ -20,7 +20,7 @@ breed [vehicles vehicle]
 turtles-own [ explosion-timer is-explosion-marker? ]
 
 soldiers-own [soldiers-speed setting-up-pontoon?]
-artilleries-own [artillery-range accuracy fire-timer]
+artilleries-own [artillery-range accuracy ]
 ; drones-own [detection-probability detection-timer increasing-accuracy?]
 vehicles-own [vehicle-speed]
 
@@ -121,7 +121,6 @@ to setup-actors
     setxy first a-position last a-position
     set artillery-range 1400
     set accuracy 0.5
-    set fire-timer (30 + random 31)
     set size 10
   ]
 
@@ -184,6 +183,7 @@ to fire-artillery
   ask artilleries [
     set fire-timer fire-timer - 1
     if fire-timer <= 0 [
+      ;; 砲兵範囲内で兵士数が最も多いパッチを探索
       let best-patch nobody
       let best-count -1
 
@@ -210,6 +210,7 @@ to fire-artillery
           ]
         ]
       ]
+      ;; fire-timer を再設定
       set fire-timer (30 + random 31)
     ]
   ]
