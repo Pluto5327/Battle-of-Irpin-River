@@ -1,7 +1,15 @@
 globals [
-  grass-color main-road-color rural-road-color dirt-road-color water-color goal-color
+  grass-color main-road-color rural-road-color dirt-road-color water-color goal-color pontoon-color
   troop-start-coords
   truck-start-coords
+  ;; bridge related parameters
+  russian-crossed
+  site-list
+  site-counters
+  site-timers
+  bridges-list
+  build-duration
+  construct-team
 ]
 patches-own [terrain]
 turtles-own [group-id unit-type]
@@ -16,11 +24,30 @@ to setup
   set dirt-road-color approximate-rgb 176 181 176
   set water-color approximate-rgb 4 36 194
   set goal-color approximate-rgb 252 252 60
+  set pontoon-color approximate-rgb 139 69 19
 
-  set-patch-size 4
+  set-patch-size 1
   resize-world 0 459 0 624
 
   import-pcolors "NewIrpinMap.png"
+
+  ; set parameters
+  set russian-crossed 0
+  set build-duration 60 ; 15 minutes for each part
+  set construct-team 12
+  ; set bridge locations
+  set site-counters [
+    [0 0] ; troops currently here, pontoons currently here,
+  ]
+  set site-timers [
+    0
+  ]
+  set site-list [
+    [[325 60] [350 60]]
+  ]
+  set bridges-list [
+  ]
+
   classify-terrain
   spawn-troops
   spawn-trucks
@@ -30,6 +57,7 @@ end
 to go
   move-troops
   move-trucks
+  update-site-status
   tick
 end
 
@@ -41,6 +69,7 @@ to classify-terrain
     if pcolor = dirt-road-color [ set terrain "dirt-road" ]
     if pcolor = water-color [ set terrain "water" ]
     if pcolor = goal-color [ set terrain "goal" ]
+    if pcolor = pontoon-color [ set terrain "pontoon" ]
   ]
 end
 
@@ -48,16 +77,16 @@ to spawn-troops
   set troop-start-coords [
     [0 619]
     [0 361]
-    [0 68]
+    [0 60]
   ]
 
-  let troops-per-group (3 / length troop-start-coords)
+  let troops-per-group (36 / length troop-start-coords)
   let group 0
   foreach troop-start-coords [coords ->
     let x item 0 coords
     let y item 1 coords
     crt troops-per-group [
-      setxy x y
+      setxy x + random 5 y
       set group-id group
       set unit-type "troop"
       set shape "person"
@@ -72,6 +101,10 @@ end
 to move-troops
   ask turtles with [unit-type = "troop"] [
     let ahead patch-ahead 1
+    if terrain = "goal" [
+      set russian-crossed russian-crossed + 1
+      die  ;; Remove the troop
+    ]
     if [terrain] of ahead != "water" [
       fd 1
       ;; each patch is 16m * 16m
@@ -89,16 +122,16 @@ to spawn-trucks
   set truck-start-coords [
     [0 610]
     [0 350]
-    [0 60]
+    [0 63]
   ]
 
-  let trucks-per-group (3 / length truck-start-coords)
+  let trucks-per-group (81 / length truck-start-coords)
   let group 0
   foreach truck-start-coords [coords ->
     let x item 0 coords
     let y item 1 coords
     crt trucks-per-group [
-      setxy x y
+      setxy x + random 5 y + random 5
       set group-id group
       set unit-type "truck"
       set shape "truck"
@@ -113,22 +146,107 @@ end
 to move-trucks
   ask turtles with [unit-type = "truck"] [
     let ahead patch-ahead 5
-    if [terrain] of ahead != "water" [
-      fd 5  ;; Trucks move faster than troops
+    if [terrain] of ahead != "water" and [terrain] of ahead != "pontoon" [
+      fd 5
+      ;; Trucks move faster than troops
       ;; using 20 km / hour (max speed = 85km/hour)
       ;; 20000 / 60 / 16 / 4 ~ 5 -> patch / 15seconds
     ]
   ]
 end
+
+;; =================== bridge building ==================
+
+to update-site-status
+  let index 0
+  let search-radius 20
+
+  ;; Iterate through each site in site-list
+  foreach site-list [ site ->
+    let wx first first site  ;; First x-coordinate
+    let wy last first site   ;; First y-coordinate
+    ;; Count troops in radius 5
+    let troop-count count turtles with [unit-type = "troop" and distancexy wx wy <= search-radius]
+
+    ;; Count trucks in radius 5
+    let truck-group turtles with [unit-type = "truck" and distancexy wx wy <= search-radius]
+    let truck-count count truck-group
+
+    ;; Update site-counter with new values
+    set site-counters replace-item index site-counters (list troop-count truck-count)
+
+    let ex first last site
+    let ey last last site
+
+    let required-pontoon ex - wx
+    let required-time required-pontoon * build-duration
+
+    ;; If both troop and truck counts are at least 1, build bridge
+    if troop-count >= construct-team and truck-count >= required-pontoon [
+      set site-timers replace-item index site-timers (item index site-timers + 1)
+      if item index site-timers > required-time [
+        draw-bridge wx wy ex ey
+        set bridges-list lput site bridges-list
+
+        ;; Remove required-pontoon number of trucks from the closest ones
+        let trucks-to-remove min-n-of required-pontoon truck-group [distancexy wx wy]
+        ask trucks-to-remove [die]
+        set site-counters replace-item index site-counters [0 0]
+      ]
+    ]
+    set index index + 1
+
+  ]
+end
+
+to draw-bridge [wx wy ex ey]
+  let width 0.5  ;; Half-width of the bridge (so full width = 10)
+
+  let bx (ex - wx)
+  let by (ey - wy)
+  let dist_temp sqrt (bx * bx + by * by)
+
+  ;; Normalize direction vector
+  let unit-x bx / dist_temp
+  let unit-y by / dist_temp
+
+  ;; Perpendicular vector for width
+  let perp-x -1 * unit-y
+  let perp-y unit-x
+
+  ;; Iterate along the bridge path
+  foreach (range 0 dist_temp 0.5) [ i ->
+    let cx (wx + i * unit-x)
+    let cy (wy + i * unit-y)
+
+    ;; Color the patches
+    foreach (range (-1 * width) width 0.5) [ j ->
+      let px (cx + j * perp-x)
+      let py (cy + j * perp-y)
+      ask patch round px round py [
+        set pcolor approximate-rgb 139 69 19
+        set terrain "pontoon"
+      ]
+    ]
+  ]
+end
+
+;; ================= helper functions ==================
+
+to check-patch
+  ask patch (round mouse-xcor) (round mouse-ycor) [
+    show (word "Patch (" pxcor "," pycor ") - " terrain " | pcolor: " pcolor)
+  ]
+end
 @#$#@#$#@
 GRAPHICS-WINDOW
-2407
-237
-4255
-2746
+318
+61
+796
+704
 -1
 -1
-4.0
+1.0
 1
 10
 1
@@ -149,10 +267,10 @@ ticks
 30.0
 
 BUTTON
-1076
-303
-1952
-674
+20
+86
+232
+165
 NIL
 setup
 NIL
@@ -166,10 +284,10 @@ NIL
 1
 
 BUTTON
-1068
-771
-1959
-1177
+20
+278
+230
+355
 NIL
 go
 T
@@ -181,6 +299,50 @@ NIL
 NIL
 NIL
 1
+
+MONITOR
+20
+408
+127
+454
+NIL
+russian-crossed
+17
+1
+11
+
+MONITOR
+74
+562
+234
+608
+troops count for site 1
+first item 0 site-counters
+17
+1
+11
+
+MONITOR
+74
+625
+236
+671
+truck (pontoon) count for site 1
+last item 0 site-counters
+17
+1
+11
+
+MONITOR
+75
+502
+217
+548
+timer for building on site 1
+item 0 site-timers
+17
+1
+11
 
 @#$#@#$#@
 ## WHAT IS IT?
