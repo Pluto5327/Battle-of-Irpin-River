@@ -1,9 +1,10 @@
 globals [
   grass-color main-road-color rural-road-color dirt-road-color water-color goal-color
   troop-start-coords
+  truck-start-coords
 ]
 patches-own [terrain]
-turtles-own [group-id]
+turtles-own [group-id unit-type]
 
 to setup
   clear-all
@@ -19,14 +20,16 @@ to setup
   set-patch-size 4
   resize-world 0 459 0 624
 
-  import-pcolors "/Users/gerardspooner/Downloads/NewIrpinMap.png"
+  import-pcolors "NewIrpinMap.png"
   classify-terrain
   spawn-troops
+  spawn-trucks
   reset-ticks
 end
 
 to go
   move-troops
+  move-trucks
   tick
 end
 
@@ -56,8 +59,10 @@ to spawn-troops
     crt troops-per-group [
       setxy x y
       set group-id group
+      set unit-type "troop"
+      set shape "person"
       set color red
-      set size 10
+      set size 4
       set heading 90  ;; face right
     ]
     set group group + 1
@@ -65,10 +70,53 @@ to spawn-troops
 end
 
 to move-troops
-  ask turtles [
+  ask turtles with [unit-type = "troop"] [
     let ahead patch-ahead 1
     if [terrain] of ahead != "water" [
       fd 1
+      ;; each patch is 16m * 16m
+      ;; 460 * 625 patches
+      ;; average army moving speed = 4 km / hour = 66.6 meter / minute
+      ;; 4.16 patch every tick (minute) -> 4 patch each minute
+      ;; let each tick be 15 seconds!
+      ;; unpaved road = 60%
+    ]
+  ]
+end
+
+to spawn-trucks
+  ;; Define starting positions for the trucks
+  set truck-start-coords [
+    [0 610]
+    [0 350]
+    [0 60]
+  ]
+
+  let trucks-per-group (3 / length truck-start-coords)
+  let group 0
+  foreach truck-start-coords [coords ->
+    let x item 0 coords
+    let y item 1 coords
+    crt trucks-per-group [
+      setxy x y
+      set group-id group
+      set unit-type "truck"
+      set shape "truck"
+      set color black
+      set size 6  ;; Bigger than troops
+      set heading 90  ;; Face right
+    ]
+    set group group + 1
+  ]
+end
+
+to move-trucks
+  ask turtles with [unit-type = "truck"] [
+    let ahead patch-ahead 5
+    if [terrain] of ahead != "water" [
+      fd 5  ;; Trucks move faster than troops
+      ;; using 20 km / hour (max speed = 85km/hour)
+      ;; 20000 / 60 / 16 / 4 ~ 5 -> patch / 15seconds
     ]
   ]
 end
@@ -101,10 +149,10 @@ ticks
 30.0
 
 BUTTON
-2231
-271
-2298
-305
+1076
+303
+1952
+674
 NIL
 setup
 NIL
@@ -118,10 +166,10 @@ NIL
 1
 
 BUTTON
-2233
-351
-2299
-387
+1068
+771
+1959
+1177
 NIL
 go
 T
