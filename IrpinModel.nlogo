@@ -4,9 +4,11 @@ globals [
   truck-start-coords
   ;; bridge related parameters
   russian-crossed
+  site-troops-per-group
   site-list
   site-counters
   site-timers
+  site-current-max-timer
   bridges-list
   build-duration
   construct-team
@@ -35,13 +37,19 @@ to setup
   set russian-crossed 0
   set build-duration 60 ; 15 minutes for each part
   set construct-team 12
-  ; set bridge locations
+  set site-troops-per-group [
+    15 12 10
+  ]
   set site-counters [
     [0 0] ; troops currently here, pontoons currently here,
   ]
   set site-timers [
-    0
+    0 0 0
   ]
+  set site-current-max-timer [
+    0 0 0
+  ]
+  ; set bridge locations
   set site-list [
     [[325 60] [350 60]]
   ]
@@ -80,7 +88,7 @@ to spawn-troops
     [0 60]
   ]
 
-  let troops-per-group (36 / length troop-start-coords)
+  let troops-per-group (3 / length troop-start-coords)
   let group 0
   foreach troop-start-coords [coords ->
     let x item 0 coords
@@ -101,8 +109,11 @@ end
 to move-troops
   ask turtles with [unit-type = "troop"] [
     let ahead patch-ahead 1
-    if terrain = "goal" [
-      set russian-crossed russian-crossed + 1
+    if [terrain] of ahead = "goal" [
+      let troop-group item group-id site-troops-per-group
+      show group-id
+      show troop-group
+      set russian-crossed russian-crossed + troop-group
       die  ;; Remove the troop
     ]
     if [terrain] of ahead != "water" [
@@ -122,10 +133,10 @@ to spawn-trucks
   set truck-start-coords [
     [0 610]
     [0 350]
-    [0 63]
+    [0 60]
   ]
 
-  let trucks-per-group (81 / length truck-start-coords)
+  let trucks-per-group (60 / length truck-start-coords)
   let group 0
   foreach truck-start-coords [coords ->
     let x item 0 coords
@@ -166,7 +177,9 @@ to update-site-status
     let wx first first site  ;; First x-coordinate
     let wy last first site   ;; First y-coordinate
     ;; Count troops in radius 5
-    let troop-count count turtles with [unit-type = "troop" and distancexy wx wy <= search-radius]
+    let troop-group turtles with [unit-type = "troop" and distancexy wx wy <= search-radius]
+    let troop-count count troop-group
+    set troop-count troop-count * (item index site-troops-per-group)
 
     ;; Count trucks in radius 5
     let truck-group turtles with [unit-type = "truck" and distancexy wx wy <= search-radius]
@@ -181,17 +194,22 @@ to update-site-status
     let required-pontoon ex - wx
     let required-time required-pontoon * build-duration
 
+    if troop-count >= construct-team and truck-count >= 1 [
+      set site-current-max-timer replace-item index site-current-max-timer (item index site-current-max-timer + build-duration)
+      ;; Remove required-pontoon number of trucks from the closest ones
+      let trucks-to-remove min-n-of 1 truck-group [distancexy wx wy]
+      ask trucks-to-remove [die]
+    ]
     ;; If both troop and truck counts are at least 1, build bridge
-    if troop-count >= construct-team and truck-count >= required-pontoon [
+    if item index site-timers <= item index site-current-max-timer [
       set site-timers replace-item index site-timers (item index site-timers + 1)
-      if item index site-timers > required-time [
+      if item index site-timers >= required-time [
         draw-bridge wx wy ex ey
         set bridges-list lput site bridges-list
 
-        ;; Remove required-pontoon number of trucks from the closest ones
-        let trucks-to-remove min-n-of required-pontoon truck-group [distancexy wx wy]
-        ask trucks-to-remove [die]
         set site-counters replace-item index site-counters [0 0]
+        set site-timers replace-item index site-timers 0
+        set site-current-max-timer replace-item index site-current-max-timer 0
       ]
     ]
     set index index + 1
@@ -242,8 +260,8 @@ end
 GRAPHICS-WINDOW
 318
 61
-796
-704
+786
+695
 -1
 -1
 1.0
@@ -304,7 +322,7 @@ MONITOR
 20
 408
 127
-454
+453
 NIL
 russian-crossed
 17
@@ -315,7 +333,7 @@ MONITOR
 74
 562
 234
-608
+607
 troops count for site 1
 first item 0 site-counters
 17
@@ -326,7 +344,7 @@ MONITOR
 74
 625
 236
-671
+670
 truck (pontoon) count for site 1
 last item 0 site-counters
 17
@@ -337,9 +355,20 @@ MONITOR
 75
 502
 217
-548
+547
 timer for building on site 1
 item 0 site-timers
+17
+1
+11
+
+MONITOR
+75
+685
+279
+730
+current max timer for building on site 1
+item 0 site-current-max-timer
 17
 1
 11
