@@ -211,26 +211,7 @@ to build-pontoon-bridges
 end
 
 to drone-detect-and-artillery-fire
-  update-time-and-duration-of-site-activity
 
-  let num-active-sites get-num-active-sites
-  if num-active-sites = 0 [ stop ]
-
-  ;; Active sites filtering
-  let active-sites filter [site-id -> was-site-attacked-recently? site-id] chosen-site-ids
-
-  foreach active-sites [site-id ->
-    let duration item site-id site-current-activity-duration
-    let hazard artillery-alpha / num-active-sites
-    let pDestroyed 1 - exp(- hazard * duration)
-
-    if (ticks mod time-between-drone-checks = 0) and (random-float 1.0 < pDestroyed) [
-      destroy-site site-id
-      print (word "💥 Bridge/troops at site " site-id " destroyed at tick " ticks ". Activity with Duration " duration " had artillery hit probability of" pDestroyed)
-      print (word "-----------------------------------------------------------------------")
-    ]
-  ]
-end
 
 to-report battle-over?
   if ticks >= loss-battle-duration-threshold [
