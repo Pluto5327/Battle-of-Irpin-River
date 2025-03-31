@@ -13,6 +13,9 @@ globals [
   site-pontoon-bridge-built
   site-bridge-drawing-start-x
   site-bridge-drawing-end-x
+  time-of-last-site-activity
+  site-current-activity-duration
+  activity-cooldown-time
   unit-spawn-spacing
   unit-collision-spacing
   infantry-squad-depth
@@ -26,6 +29,8 @@ globals [
   num-required-builders-per-site
   num-required-pontoons-per-site
   pontoon-module-setup-time
+  artillery-alpha
+  time-between-drone-checks
   total-pontoons-built
   total-infantry-crossed
 ]
@@ -34,6 +39,10 @@ breed [infantry infantryperson]
 breed [trucks truck]
 infantry-own [site-num num-troops]
 trucks-own [site-num num-pontoons]
+
+;; ---------------------------------------------------
+;; ---------- CONTROL/SETUP FUNCTIONS ----------------
+;; ---------------------------------------------------
 
 to setup
   clear-all
@@ -46,19 +55,48 @@ to setup
   set-patch-size 3
   resize-world 0 459 0 624
 
-  import-pcolors "NewIrpinMap.png"
+  import-pcolors "/Users/gerardspooner/Downloads/NewIrpinMap.png"
   classify-terrain
   initialize-params
-  spawn-units
   reset-ticks
 end
 
-to go
-  move-units
-  build-pontoon-bridges
-  update-spawn-availability
-  if ticks mod unit-spawn-spacing = 0 [spawn-units]
-  tick ;; each 1min
+to initialize-params
+  set all-site-ids [0 1 2 3 4 5 6 7 8 9 10 11 12]
+  set chosen-site-ids all-site-ids ;; TODO - Parameterize this IV
+  set site-ys [ 576 542 526 403 329 292 263 237 210 171 142 112 82]
+  set site-is-spawning [true true true true true true true true true true true true true]
+  set site-builder-count [0 0 0 0 0 0 0 0 0 0 0 0 0]
+  set num-required-builders-per-site 18
+  set site-pontoon-count [0 0 0 0 0 0 0 0 0 0 0 0 0]
+  set site-pontoon-built-count [0 0 0 0 0 0 0 0 0 0 0 0 0]
+  set site-pontoon-bridge-built [false false false false false false false false false false false false false]
+  set num-required-pontoons-per-site [183 131 131 104 160 165 179 208 240 226 302 107 104]
+  set time-of-last-site-activity [-1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1] ;; Default state, no activity yet at any site
+  set site-current-activity-duration [0 0 0 0 0 0 0 0 0 0 0 0 0]
+  set dirt-roads-start-x 235
+  set unit-spawn-spacing 10 ;; TODO - Parameterize this IV
+  set unit-collision-spacing 10 ;; This should be the
+  set infantry-road-speed 4 ;; Map is 7.5mi wide and 460 pixels wide, troops march at 4mph, ticks are 1min.
+  set truck-road-speed 45 ;; Same map/tick values, trucks move 44mph
+  set infantry-dirt-speed 3
+  set truck-dirt-speed 15
+  set truck-pontoon-module-capacity 1
+
+  ;; KEY PARAMETERS
+  set site-troops-per-road [6 6 6 6 6 6 6 6 6 6 6 6 16] ;; Based on real path/road widths at the site opening. THIS IS FAIRLY ACCURATE ESTIMATE.
+  set infantry-squad-depth 340 ;; Since spawn/collision spacing is 10coords = 860ft, then ~344 troops can fit in that space. THIS IS HIGHEST REALISTIC DENSITY ESTIMATE.
+  set truck-group-depth 20 ;; Since spawn/collision spacing is 10coords = 860ft, then ~21.5 PMP trucks can fit in that space. THIS IS HIGHEST REALISTIC DENSITY ESTIMATE.
+  set pontoon-module-setup-time 1 ;; In minutes; THIS IS UNDER IDEAL CONDITIONS. Each 22ft unit done in 1min, see odin website.
+  set activity-cooldown-time 30 ;; 30min after last activity has been seen, the t in the artillery equation will be reset. THIS IS A SEMI ARBITRARY VALUE
+  set artillery-alpha 0.035
+  set time-between-drone-checks 10 ;; 10min
+
+  ;; Dependent Variables
+  set total-pontoons-built 0
+  set total-infantry-crossed 0
+
+  update-bridge-drawing-x-values
 end
 
 to classify-terrain
@@ -68,38 +106,18 @@ to classify-terrain
   ]
 end
 
-to initialize-params
-  set all-site-ids [0 1 2 3 4 5 6 7 8 9 10 11 12]
-  set chosen-site-ids all-site-ids ;; TODO - Parameterize this IV
-  set site-ys [ 576 542 526 403 329 292 263 237 210 171 142 112 82]
-  set site-troops-per-road [6 6 6 6 6 6 6 6 6 6 6 6 16] ;; Based on real path/road widths at the site opening
-  set site-is-spawning [true true true true true true true true true true true true true]
-  set site-builder-count [0 0 0 0 0 0 0 0 0 0 0 0 0]
-  set num-required-builders-per-site 18
-  set site-pontoon-count [0 0 0 0 0 0 0 0 0 0 0 0 0]
-  set site-pontoon-built-count [0 0 0 0 0 0 0 0 0 0 0 0 0]
-  set site-pontoon-bridge-built [false false false false false false false false false false false false false]
-  set num-required-pontoons-per-site [183 131 131 104 160 165 179 208 240 226 302 107 104]
-  set dirt-roads-start-x 235
-  set unit-spawn-spacing 10 ;; TODO - Parameterize this IV
-  set unit-collision-spacing 10 ;; TODO - Calibrate this
-  set infantry-road-speed 4 ;; Map is 7.5mi wide and 460 pixels wide, troops march at 4mph, ticks are 1min.
-  set truck-road-speed 45 ;; Same map/tick values, trucks move 44mph
-  set infantry-dirt-speed 3
-  set truck-dirt-speed 15
-  set truck-pontoon-module-capacity 1
-
-  ;; KEY PARAMETERS
-  set infantry-squad-depth 340 ;; Since unit spacing is 10coords = 860ft, then ~344 troops can fit in that space. THIS IS MAX DENSITY CONFIG.
-  set truck-group-depth 20 ;; Since unit spacing is 10coords = 860ft, then ~21.5 PMP trucks can fit in that space. THIS IS MAX DENSITY CONFIG.
-  set pontoon-module-setup-time 1 ;; Under 'ideal conditions', each 22ft unit done in 1min = 1 tick, see odin website
-
-  ;; Dependent Variables
-  set total-pontoons-built 0
-  set total-infantry-crossed 0
-
-  update-bridge-drawing-x-values
+to go
+  if ticks mod unit-spawn-spacing = 0 [spawn-units]
+  drone-detect-and-artillery-fire
+  move-units
+  build-pontoon-bridges
+  update-spawn-availability
+  tick ;; each represents 1min
 end
+
+;; ---------------------------------------------------
+;; ----------------- MAIN FUNCTIONS ------------------
+;; ---------------------------------------------------
 
 to spawn-units
   foreach chosen-site-ids [site-id ->
@@ -107,7 +125,7 @@ to spawn-units
     if site-spawning [
       let camp-y item site-id site-ys
       let infantry-squad-width item site-id site-troops-per-road
-      create-trucks 1 [
+      create-trucks 1 [ ;; = A line/group of trucks
         setxy 0 camp-y
         set site-num site-id
         set num-pontoons truck-pontoon-module-capacity * truck-group-depth ;; TODO - Set this appropriately
@@ -116,11 +134,11 @@ to spawn-units
         set size 10
         set heading 90  ;; face right
       ]
-      create-infantry 1 [
+      create-infantry 1 [ ;; = A rectangular group of foot soldiers
         setxy 0 camp-y
         set site-num site-id
         set num-troops infantry-squad-width * infantry-squad-depth
-        set color red
+        set color white
         set size 6
         set heading 90  ;; face right
       ]
@@ -161,16 +179,42 @@ to build-pontoon-bridges
         ;; Otherwise, if the necessary ppl/resources are there, add to the existing bridge
         if builders-ready and (num-pontoons-ready >= 1) [
           let current-total-pontoons-built total-pontoons-built
-          set total-pontoons-built (current-total-pontoons-built + 1)
-          set site-pontoon-built-count replace-item site-id site-pontoon-built-count (num-pontoon-pieces-built + 1)
-          set site-pontoon-count replace-item site-id site-pontoon-count (num-pontoons-ready - 1)
+          let pontoons-built-per-tick 1 / pontoon-module-setup-time
+          set total-pontoons-built (current-total-pontoons-built + pontoons-built-per-tick)
+          set site-pontoon-built-count replace-item site-id site-pontoon-built-count (num-pontoon-pieces-built + pontoons-built-per-tick)
+          set site-pontoon-count replace-item site-id site-pontoon-count (num-pontoons-ready - pontoons-built-per-tick)
         ]
       ]
     ]
  ]
 end
 
+to drone-detect-and-artillery-fire
+  update-time-and-duration-of-site-activity
+
+  let num-active-sites get-num-active-sites
+  if num-active-sites = 0 [ stop ]
+
+  foreach chosen-site-ids [site-id ->
+    if was-site-attacked-recently? site-id [
+      let duration item site-id site-current-activity-duration
+      let hazard artillery-alpha / num-active-sites
+      let pDestroyed 1 - exp(- hazard * duration)
+
+      if (ticks mod time-between-drone-checks = 0) and (random-float 1.0 < pDestroyed) [
+        destroy-site site-id
+        print (word "-----------------------------------------------------------------------")
+        print (word "💥 Bridge/troops at site " site-id " destroyed at tick " ticks)
+        print (word "Activity with Duration " duration " had artillery hit probability of" pDestroyed)
+        print (word "-----------------------------------------------------------------------")
+      ]
+    ]
+  ]
+end
+
+;; ---------------------------------------------------
 ;; ---------------- HELPER FUNCTIONS -----------------
+;; ---------------------------------------------------
 
 ;; Prevents spawners from getting backed up when line reaches them
 to update-spawn-availability
@@ -233,7 +277,7 @@ end
 
 ;; Prevents trucks from jumping past next truck or the water
 to safe-forward-trucks [total-distance]
-  let step-size 1
+  let step-size 1 ;; can also expirement with 5 here if performance is too slow (as long as step-size is stricly smaller than collision spacing, should work)
   let moved 0
   while [moved < total-distance] [
     ;; Move only if there's no close unit in front
@@ -356,6 +400,79 @@ to draw-bridge [site-n]
     set terrain "bridge"
   ]
 end
+
+to redraw-water [site-n]
+  let y item site-n site-ys
+  let x-start item site-n site-bridge-drawing-start-x
+  let x-end item site-n site-bridge-drawing-end-x
+
+  ;; Safety check
+  if (x-start = false or x-end = false) [ stop ]
+
+  ;; Loop over a vertical band: y-2 to y+2 (5 patches tall)
+  ask patches with [
+    pxcor >= x-start and pxcor <= x-end and
+    pycor >= (y - 2) and pycor <= (y + 2)
+  ] [
+    set pcolor water-color
+    set terrain "water"
+  ]
+end
+
+to update-time-and-duration-of-site-activity
+  foreach chosen-site-ids [site-id ->
+    ifelse is-site-currently-active? site-id [
+      ;; If active, update time-of-last-site-activity and increase duration
+      set time-of-last-site-activity replace-item site-id time-of-last-site-activity ticks
+      let prev-dur item site-id site-current-activity-duration
+      set site-current-activity-duration replace-item site-id site-current-activity-duration (prev-dur + 1)
+    ] [
+      ;; If inactive and cooldown has expired, reset duration
+      if not was-site-attacked-recently? site-id [
+        set site-current-activity-duration replace-item site-id site-current-activity-duration 0
+      ]
+    ]
+  ]
+end
+
+to-report get-num-active-sites
+  let num-active-sites 0
+  foreach chosen-site-ids [site-id ->
+    if is-site-currently-active? site-id [
+      set num-active-sites (num-active-sites + 1)
+    ]
+  ]
+  report num-active-sites
+end
+
+to-report is-site-currently-active? [site-id]
+  let num-active-soldiers item site-id site-builder-count
+  report num-active-soldiers > 0
+end
+
+to-report was-site-attacked-recently? [site-id]
+  let last-attack-time item site-id time-of-last-site-activity
+  ifelse last-attack-time = -1 [
+    report false
+  ] [
+    report ticks - last-attack-time < activity-cooldown-time
+  ]
+end
+
+to destroy-site [site-id]
+  set site-builder-count replace-item site-id site-builder-count 0
+  set site-pontoon-count replace-item site-id site-pontoon-count 0
+  set site-pontoon-built-count replace-item site-id site-pontoon-built-count 0
+  set site-pontoon-bridge-built replace-item site-id site-pontoon-bridge-built false
+  redraw-water site-id
+end
+
+;; TODO: set win and loss conditions, and display/enforce them
+;; TODO: show total infantry/pontoons spawned total (not framed as DV)
+;; TODO: maybe animate blinking red shape in middle of where pontoon bridge was destroyed
+;; TODO: Add dropdown menu for site selection (should do preprocessing in setup)
+;; TODO: Add dropdown menu for spacing/waves
+
 @#$#@#$#@
 GRAPHICS-WINDOW
 2407
@@ -447,7 +564,7 @@ MONITOR
 744
 Pontoons Modules Ready to be Built at each Site
 site-pontoon-count
-17
+0
 1
 14
 
@@ -458,7 +575,7 @@ MONITOR
 849
 Number of Pontoon Modules Built at each Site
 site-pontoon-built-count
-17
+0
 1
 14
 
@@ -474,23 +591,34 @@ site-pontoon-bridge-built
 14
 
 MONITOR
-1350
-1010
-1675
-1067
+1344
+1110
+1669
+1167
 Total Number of Pontoon Modules Built
 total-pontoons-built
+0
+1
+14
+
+MONITOR
+1347
+1210
+1576
+1267
+Number of Troops Crossed
+total-infantry-crossed
 17
 1
 14
 
 MONITOR
-1352
-1109
-1581
-1166
-Number of Troops Crossed
-total-infantry-crossed
+1350
+992
+1685
+1051
+Time Of Last Building Activity at Each Site
+time-of-last-site-activity
 17
 1
 14
