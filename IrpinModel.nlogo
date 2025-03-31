@@ -69,7 +69,7 @@ end
 
 to initialize-params
   set all-site-ids [0 1 2 3 4 5 6 7 8 9 10 11 12]
-  set chosen-site-ids all-site-ids ;; TODO - Parameterize this IV
+  ;;set chosen-site-ids all-site-ids ;; TODO - Parameterize this IV
   set site-ys [ 576 542 526 403 329 292 263 237 210 171 142 112 82]
   set site-is-spawning [true true true true true true true true true true true true true]
   set site-builder-count [0 0 0 0 0 0 0 0 0 0 0 0 0]
@@ -77,16 +77,17 @@ to initialize-params
   set site-pontoon-count [0 0 0 0 0 0 0 0 0 0 0 0 0]
   set site-pontoon-built-count [0 0 0 0 0 0 0 0 0 0 0 0 0]
   set site-pontoon-bridge-built [false false false false false false false false false false false false false]
-  set num-required-pontoons-per-site [183 131 131 104 160 165 179 208 240 226 302 107 104]
+  set num-required-pontoons-per-site [183 131 131 104 160 165 179 208 240 226 302 107 104] ;; # Modules required to build respective bridges
+  set chosen-site-ids select-sites
   set time-of-last-site-activity [-1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1] ;; Default state, no activity yet at any site
   set site-current-activity-duration [0 0 0 0 0 0 0 0 0 0 0 0 0]
   set dirt-roads-start-x 235
-  set unit-spawn-spacing 10 ;; TODO - Parameterize this IV
-  set unit-collision-spacing 10 ;; This should be the
-  set infantry-road-speed 4 ;; Map is 7.5mi wide and 460 pixels wide, troops march at 4mph, ticks are 1min.
-  set truck-road-speed 45 ;; Same map/tick values, trucks move 44mph
-  set infantry-dirt-speed 3
-  set truck-dirt-speed 15
+  set unit-spawn-spacing 10 ;; Ticks between group of infantry/trucks sent out. TODO - Parameterize this IV
+  set unit-collision-spacing 10
+  set infantry-road-speed 4 ;; # of pixels moved per tick; About 4mph. Source: Map is 7.5mi wide and 460 pixels wide, troops march at about 4mph, ticks are 1min.
+  set truck-road-speed 45 ;; Pixels per tick; About 44mph
+  set infantry-dirt-speed 3 ;; Pixels per tick; About 3mph
+  set truck-dirt-speed 15 ;; Pixels per tick; About 15mph
   set truck-pontoon-module-capacity 1
   set total-infantry-crossed 0
   set total-pontoons-built 0
@@ -94,8 +95,9 @@ to initialize-params
 
   ;; KEY PARAMETERS
   set site-troops-per-road [6 6 6 6 6 6 6 6 6 6 6 6 16] ;; Based on real path/road widths at the site opening. THIS IS FAIRLY ACCURATE ESTIMATE.
-  set infantry-squad-depth 340 ;; Since spawn/collision spacing is 10coords = 860ft, then ~344 troops can fit in that space. THIS IS HIGHEST REALISTIC DENSITY ESTIMATE.
-  set truck-group-depth 20 ;; Since spawn/collision spacing is 10coords = 860ft, then ~21.5 PMP trucks can fit in that space. THIS IS HIGHEST REALISTIC DENSITY ESTIMATE.
+  set infantry-squad-depth 400 ;; Every 10ticks a squad moves 4pixels-per-tick = 40 pixels between squads = 0.65mi = ~1370 troops can fit in that space.
+  ;; But since trucks (11ft) wide must pass and take up roughly 60-70% of the road width, then only a max of 30% or 400 troops can actually be in this space. THIS IS HIGHEST REALISTIC DENSITY ESTIMATE.
+  set truck-group-depth 20 ;; Every 10ticks a group is sent out at 45pixels-per-tick, then ~21.5 PMP trucks can fit in that space. THIS IS HIGHEST REALISTIC DENSITY ESTIMATE.
   set pontoon-module-setup-time 1 ;; In minutes; THIS IS UNDER IDEAL CONDITIONS. Each 22ft unit done in 1min, see odin website.
   set activity-cooldown-time 30 ;; 30min after last activity has been seen, the t in the artillery equation will be reset. THIS IS A SEMI ARBITRARY VALUE
   set artillery-alpha 0.035
@@ -125,7 +127,7 @@ to go
   build-pontoon-bridges
   update-spawn-availability
   if battle-over? [stop]
-  tick ;; each represents 1min
+  tick ;; IMPORTANT: each represents 1min
 end
 
 ;; ---------------------------------------------------
@@ -244,6 +246,34 @@ end
 ;; ---------------------------------------------------
 ;; ---------------- HELPER FUNCTIONS -----------------
 ;; ---------------------------------------------------
+
+to-report select-sites
+  ;; Shortest X Sites Options-------------------------
+
+  ;; Extract number of sites to use
+  let num-sites-literal substring site-selection-mode 0 2
+  let num-sites read-from-string num-sites-literal
+
+  ;; Step 1: Get number of sites available
+  let num-total-sites length all-site-ids
+
+  ;; Step 2: Make a list of site-id/pontoon pairs
+  let site-pairs []
+  (foreach (n-values num-total-sites [ i -> i ]) num-required-pontoons-per-site [
+    [site-id pontoon-count] ->
+      set site-pairs lput (list site-id pontoon-count) site-pairs
+  ])
+
+  ;; Step 3: Sort those site-pairs by required pontoons (ascending)
+  let sorted-pairs sort-by [[a b] -> item 1 a < item 1 b] site-pairs
+
+  ;; Step 4: Choose top `num-sites` site-ids
+  let selected-site-ids []
+  (foreach sublist sorted-pairs 0 num-sites [
+    [pair] -> set selected-site-ids lput (item 0 pair) selected-site-ids
+  ])
+  report selected-site-ids
+end
 
 ;; Prevents spawners from getting backed up when line reaches them
 to update-spawn-availability
@@ -459,7 +489,6 @@ to update-time-and-duration-of-site-activity
       ;; If inactive and cooldown has expired, reset duration
       if not was-site-attacked-recently? site-id [
         set site-current-activity-duration replace-item site-id site-current-activity-duration 0
-        ;; TODO redraw water at site to show that it is no longer under fire
       ]
     ]
   ]
@@ -521,11 +550,9 @@ to destroy-site [site-id]
   ]
 end
 
-;; TODO: maybe animate blinking red shape in middle of where pontoon bridge was destroyed
-;; TODO: maybe draw little squares, during setup, at each chosen spawn point
-;; TODO: Add dropdown menu for IV1 - site selection (should do preprocessing in setup)
-;; TODO: Add dropdown menu for IV3 - spacing/waves
-;; TODO: genericize image file import
+;; TODO1: Add dropdown menu for IV3 - spacing/waves
+;; TODO2: maybe animate blinking red shape in middle of where pontoon bridge was destroyed
+;; TODO3: maybe draw little squares, during setup, at each chosen spawn point
 @#$#@#$#@
 GRAPHICS-WINDOW
 2407
@@ -555,10 +582,10 @@ ticks
 30.0
 
 BUTTON
-2204
-322
-2271
-356
+2262
+336
+2329
+370
 NIL
 setup
 NIL
@@ -572,10 +599,10 @@ NIL
 1
 
 BUTTON
-2302
-322
-2368
-358
+2258
+436
+2324
+472
 NIL
 go
 T
@@ -589,10 +616,10 @@ NIL
 1
 
 MONITOR
-1304
-646
-2340
-703
+1318
+912
+2354
+969
 Whether Each Site Can Spawn More Units
 site-is-spawning
 0
@@ -600,10 +627,10 @@ site-is-spawning
 14
 
 MONITOR
-1306
-748
-2346
-805
+1320
+1014
+2360
+1071
 Infantry Ready to Build at each Site
 site-builder-count
 17
@@ -611,10 +638,10 @@ site-builder-count
 14
 
 MONITOR
-1306
-856
-2345
-913
+1320
+1122
+2359
+1179
 Pontoons Modules Ready to be Built at each Site
 site-pontoon-count
 0
@@ -622,10 +649,10 @@ site-pontoon-count
 14
 
 MONITOR
-1308
-960
-2344
-1018
+1322
+1226
+2358
+1283
 Number of Pontoon Modules Built at each Site
 site-pontoon-built-count
 0
@@ -633,10 +660,10 @@ site-pontoon-built-count
 14
 
 MONITOR
-1312
-1130
-2340
-1188
+1326
+1396
+2354
+1453
 Whether Each Site has completed Building its Bridge
 site-pontoon-bridge-built
 17
@@ -644,10 +671,10 @@ site-pontoon-bridge-built
 14
 
 MONITOR
-1694
-1222
-2019
-1279
+1708
+1488
+2033
+1545
 Total Number of Pontoon Modules Built
 total-pontoons-built
 0
@@ -655,10 +682,10 @@ total-pontoons-built
 14
 
 MONITOR
-1306
-536
-1535
-593
+1320
+802
+1549
+859
 Number of Troops Crossed
 total-infantry-crossed
 17
@@ -666,10 +693,10 @@ total-infantry-crossed
 14
 
 MONITOR
-1314
-1224
-1649
-1281
+1328
+1490
+1663
+1547
 Time Of Last Building Activity at Each Site
 time-of-last-site-activity
 17
@@ -677,10 +704,10 @@ time-of-last-site-activity
 14
 
 MONITOR
-1392
-306
-1618
-364
+1444
+426
+1670
+483
 Battle Status
 battle-outcome
 17
@@ -688,10 +715,10 @@ battle-outcome
 14
 
 MONITOR
-1656
-306
-1862
-364
+1708
+426
+1914
+483
 Number of Infantry Used/Sent
 total-infantry-used
 17
@@ -699,10 +726,10 @@ total-infantry-used
 14
 
 MONITOR
-1898
-306
-2156
-364
+1950
+426
+2208
+483
 Number of Pontoon Modules Used/Sent
 total-pontoons-used
 17
@@ -710,10 +737,10 @@ total-pontoons-used
 14
 
 MONITOR
-2054
-1224
-2266
-1282
+2068
+1490
+2280
+1547
 Number of Infantry Killed
 total-infantry-casualties
 17
@@ -721,10 +748,10 @@ total-infantry-casualties
 14
 
 MONITOR
-1578
-536
-1842
-594
+1592
+802
+1856
+859
 Infantry Casualty Ratio
 total-infantry-casualties / total-infantry-used
 4
@@ -732,15 +759,25 @@ total-infantry-casualties / total-infantry-used
 14
 
 MONITOR
-1310
-1046
-2344
-1104
+1324
+1312
+2358
+1369
 Percent Completion of Pontoon Bridge at Each Site
 map [[a b] -> round (100 * (a / b))] site-pontoon-built-count num-required-pontoons-per-site
 0
 1
 14
+
+CHOOSER
+1452
+324
+1656
+369
+site-selection-mode
+site-selection-mode
+"01 Shortest Bridges" "02 Shortest Bridges" "03 Shortest Bridges" "04 Shortest Bridges" "05 Shortest Bridges" "06 Shortest Bridges" "07 Shortest Bridges" "08 Shortest Bridges" "09 Shortest Bridges" "10 Shortest Bridges" "11 Shortest Bridges" "12 Shortest Bridges" "13 Shortest Bridges"
+12
 
 @#$#@#$#@
 ## WHAT IS IT?
@@ -1088,6 +1125,18 @@ NetLogo 6.4.0
 @#$#@#$#@
 @#$#@#$#@
 @#$#@#$#@
+<experiments>
+  <experiment name="SiteSelectionSweep" repetitions="100" runMetricsEveryStep="true">
+    <setup>setup</setup>
+    <go>go</go>
+    <metric>total-infantry-used</metric>
+    <metric>total-pontoons-used</metric>
+    <metric>battle-outcome</metric>
+    <enumeratedValueSet variable="site-selection-mode">
+      <value value="&quot;02 Shortest Bridges&quot;"/>
+    </enumeratedValueSet>
+  </experiment>
+</experiments>
 @#$#@#$#@
 @#$#@#$#@
 default
