@@ -1,5 +1,6 @@
 globals [
   water-color
+  pontoon-color
   goal-color
   site-ys
   all-site-ids
@@ -10,17 +11,23 @@ globals [
   site-pontoon-count
   site-pontoon-built-count
   site-pontoon-bridge-built
+  site-bridge-drawing-start-x
+  site-bridge-drawing-end-x
   unit-spawn-spacing
   unit-collision-spacing
+  infantry-squad-depth
+  truck-group-depth
   infantry-road-speed
   truck-road-speed
   dirt-roads-start-x
   infantry-dirt-speed
   truck-dirt-speed
+  truck-pontoon-module-capacity
   num-required-builders-per-site
   num-required-pontoons-per-site
   pontoon-module-setup-time
   total-pontoons-built
+  total-infantry-crossed
 ]
 patches-own [terrain]
 breed [infantry infantryperson]
@@ -33,14 +40,15 @@ to setup
 
   ;; Convert RGB to NetLogo color numbers
   set water-color approximate-rgb 4 36 194
+  set pontoon-color brown
   set goal-color approximate-rgb 252 252 60
 
   set-patch-size 3
   resize-world 0 459 0 624
 
   import-pcolors "/Users/gerardspooner/Downloads/NewIrpinMap.png"
-  initialize-params
   classify-terrain
+  initialize-params
   spawn-units
   reset-ticks
 end
@@ -64,7 +72,7 @@ to initialize-params
   set all-site-ids [0 1 2 3 4 5 6 7 8 9 10 11 12]
   set chosen-site-ids all-site-ids ;; TODO - Parameterize this IV
   set site-ys [ 576 542 526 403 329 292 263 237 210 171 142 112 82]
-  set site-troops-per-road [6 6 6 6 6 6 6 6 6 6 6 6 16] ;; TODO; add real #s
+  set site-troops-per-road [6 6 6 6 6 6 6 6 6 6 6 6 16] ;; Based on real path/road widths at the site opening
   set site-is-spawning [true true true true true true true true true true true true true]
   set site-builder-count [0 0 0 0 0 0 0 0 0 0 0 0 0]
   set num-required-builders-per-site 18
@@ -79,10 +87,18 @@ to initialize-params
   set truck-road-speed 45 ;; Same map/tick values, trucks move 44mph
   set infantry-dirt-speed 3
   set truck-dirt-speed 15
+  set truck-pontoon-module-capacity 1
+
+  ;; KEY PARAMETERS
+  set infantry-squad-depth 340 ;; Since unit spacing is 10coords = 860ft, then ~344 troops can fit in that space. THIS IS MAX DENSITY CONFIG.
+  set truck-group-depth 20 ;; Since unit spacing is 10coords = 860ft, then ~21.5 PMP trucks can fit in that space. THIS IS MAX DENSITY CONFIG.
   set pontoon-module-setup-time 1 ;; Under 'ideal conditions', each 22ft unit done in 1min = 1 tick, see odin website
+
+  ;; Dependent Variables
   set total-pontoons-built 0
-  ;;set site-bridge-drawing-start-x
-  ;;set site-bridge-drawing-end-x
+  set total-infantry-crossed 0
+
+  update-bridge-drawing-x-values
 end
 
 to spawn-units
@@ -90,19 +106,20 @@ to spawn-units
     let site-spawning item site-id site-is-spawning
     if site-spawning [
       let camp-y item site-id site-ys
-      let site-road-troops item site-id site-troops-per-road
+      let infantry-squad-width item site-id site-troops-per-road
       create-trucks 1 [
         setxy 0 camp-y
         set site-num site-id
-        set num-pontoons 20 ;; TODO - Set this appropriately
-        set color blue
+        set num-pontoons truck-pontoon-module-capacity * truck-group-depth ;; TODO - Set this appropriately
+        set shape "truck"
+        set color black
         set size 10
         set heading 90  ;; face right
       ]
       create-infantry 1 [
         setxy 0 camp-y
         set site-num site-id
-        set num-troops site-road-troops
+        set num-troops infantry-squad-width * infantry-squad-depth
         set color red
         set size 6
         set heading 90  ;; face right
@@ -138,7 +155,7 @@ to build-pontoon-bridges
     if not pontoon-bridge-built [
       ;; If all pieces are there, animate/draw the brdige
       ifelse num-pontoon-pieces-built = num-pontoons-req [
-        ;; call draw-bridge
+        draw-bridge site-id
         set site-pontoon-bridge-built replace-item site-id site-pontoon-bridge-built true
       ] [
         ;; Otherwise, if the necessary ppl/resources are there, add to the existing bridge
@@ -170,17 +187,14 @@ to update-spawn-availability
   ]
 end
 
-
-;; Checks if there's water directly ahead (in front patch at distance 1).
-to-report water-ahead?
+;; Checks if there's a specific terrain type ahead (in front patch at distance 1).
+to-report terrain-ahead? [terrain-type]
   let ahead patch-ahead 1
   if ahead = nobody [
-    ;; If there's no patch ahead (edge of the world?), treat it however you want:
     report false
   ]
-  report ([terrain] of ahead = "water")
+  report ([terrain] of ahead = terrain-type)
 end
-
 
 ;; These checks if the next infantry in the same line is too close ahead horizontally.
 to-report infantry-close-ahead?
@@ -225,7 +239,7 @@ to safe-forward-trucks [total-distance]
     ;; Move only if there's no close unit in front
     ifelse (not trucks-close-ahead?) [
       ;; If there's no water ahead, just move
-      ifelse (not water-ahead?) [
+      ifelse (not terrain-ahead? "water") and (not terrain-ahead? "bridge") [
         fd step-size
         set moved moved + step-size
       ]
@@ -250,8 +264,12 @@ to safe-forward-infantry [total-distance]
   while [moved < total-distance] [
     ;; Move only if there's no close unit in front
     ifelse (not infantry-close-ahead?) [
+      if terrain-ahead? "goal" [
+        set total-infantry-crossed total-infantry-crossed + num-troops
+        die
+      ]
       ;; If there's no water ahead, just move as usual
-      ifelse (not water-ahead?) [
+      ifelse (not terrain-ahead? "water") [
         fd step-size
         set moved moved + step-size
       ]
@@ -295,6 +313,50 @@ to site-add-pontoons
   set site-pontoon-count replace-item site-num site-pontoon-count (pontoon-ct + num-pontoons)
   die
 end
+
+to update-bridge-drawing-x-values
+  let start-xs []
+  let end-xs []
+
+  foreach site-ys [y ->
+    ;; Get leftmost water x at this y
+    let water-x false
+    if any? patches with [terrain = "water" and pycor = y] [
+      set water-x min [pxcor] of patches with [terrain = "water" and pycor = y]
+    ]
+
+    ;; Get leftmost goal x at this y
+    let goal-x false
+    if any? patches with [terrain = "goal" and pycor = y] [
+      set goal-x min [pxcor] of patches with [terrain = "goal" and pycor = y]
+    ]
+
+    set start-xs lput water-x start-xs
+    set end-xs lput goal-x end-xs
+  ]
+
+  set site-bridge-drawing-start-x start-xs
+  set site-bridge-drawing-end-x end-xs
+end
+
+to draw-bridge [site-n]
+  let y item site-n site-ys
+  let x-start item site-n site-bridge-drawing-start-x
+  let x-end item site-n site-bridge-drawing-end-x
+
+  ;; Safety check
+  if (x-start = false or x-end = false) [ stop ]
+
+  ;; Loop over a vertical band: y-2 to y+2 (5 patches tall)
+  ask patches with [
+    pxcor >= x-start and pxcor <= x-end and
+    pycor >= (y - 2) and pycor <= (y + 2)
+  ] [
+    set pcolor pontoon-color
+    set terrain "bridge"
+  ]
+end
+
 @#$#@#$#@
 GRAPHICS-WINDOW
 2407
@@ -419,6 +481,17 @@ MONITOR
 1069
 Total Number of Pontoon Modules Built
 total-pontoons-built
+17
+1
+14
+
+MONITOR
+1352
+1109
+1581
+1168
+Number of Troops Crossed
+total-infantry-crossed
 17
 1
 14
