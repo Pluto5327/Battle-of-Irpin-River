@@ -6,6 +6,10 @@ globals [
   chosen-site-ids
   site-troops-per-road
   site-is-spawning
+  site-builder-count
+  site-pontoon-count
+  site-pontoon-built-count
+  site-pontoon-bridge-built
   unit-spawn-spacing
   unit-collision-spacing
   infantry-road-speed
@@ -13,12 +17,16 @@ globals [
   dirt-roads-start-x
   infantry-dirt-speed
   truck-dirt-speed
+  num-required-builders-per-site
+  num-required-pontoons-per-site
+  pontoon-module-setup-time
+  total-pontoons-built
 ]
 patches-own [terrain]
 breed [infantry infantryperson]
 breed [trucks truck]
 infantry-own [site-num num-troops]
-trucks-own [site-num]
+trucks-own [site-num num-pontoons]
 
 to setup
   clear-all
@@ -39,6 +47,7 @@ end
 
 to go
   move-units
+  build-pontoon-bridges
   update-spawn-availability
   if ticks mod unit-spawn-spacing = 0 [spawn-units]
   tick ;; each 1min
@@ -53,17 +62,27 @@ end
 
 to initialize-params
   set all-site-ids [0 1 2 3 4 5 6 7 8 9 10 11 12]
-  set chosen-site-ids all-site-ids
+  set chosen-site-ids all-site-ids ;; TODO - Parameterize this IV
   set site-ys [ 576 542 526 403 329 292 263 237 210 171 142 112 82]
-  set site-troops-per-road [15 15 15 15 15 15 15 15 15 15 15 15 15]
+  set site-troops-per-road [6 6 6 6 6 6 6 6 6 6 6 6 16] ;; TODO; add real #s
   set site-is-spawning [true true true true true true true true true true true true true]
+  set site-builder-count [0 0 0 0 0 0 0 0 0 0 0 0 0]
+  set num-required-builders-per-site 18
+  set site-pontoon-count [0 0 0 0 0 0 0 0 0 0 0 0 0]
+  set site-pontoon-built-count [0 0 0 0 0 0 0 0 0 0 0 0 0]
+  set site-pontoon-bridge-built [false false false false false false false false false false false false false]
+  set num-required-pontoons-per-site [183 131 131 104 160 165 179 208 240 226 302 107 104]
   set dirt-roads-start-x 235
-  set unit-spawn-spacing 10
-  set unit-collision-spacing 10
+  set unit-spawn-spacing 10 ;; TODO - Parameterize this IV
+  set unit-collision-spacing 10 ;; TODO - Calibrate this
   set infantry-road-speed 4 ;; Map is 7.5mi wide and 460 pixels wide, troops march at 4mph, ticks are 1min.
   set truck-road-speed 45 ;; Same map/tick values, trucks move 44mph
   set infantry-dirt-speed 3
   set truck-dirt-speed 15
+  set pontoon-module-setup-time 1 ;; Under 'ideal conditions', each 22ft unit done in 1min = 1 tick, see odin website
+  set total-pontoons-built 0
+  ;;set site-bridge-drawing-start-x
+  ;;set site-bridge-drawing-end-x
 end
 
 to spawn-units
@@ -72,19 +91,20 @@ to spawn-units
     if site-spawning [
       let camp-y item site-id site-ys
       let site-road-troops item site-id site-troops-per-road
+      create-trucks 1 [
+        setxy 0 camp-y
+        set site-num site-id
+        set num-pontoons 20 ;; TODO - Set this appropriately
+        set color blue
+        set size 10
+        set heading 90  ;; face right
+      ]
       create-infantry 1 [
         setxy 0 camp-y
         set site-num site-id
         set num-troops site-road-troops
         set color red
-        set size 10
-        set heading 90  ;; face right
-      ]
-      create-trucks 1 [
-        setxy 0 camp-y
-        set site-num site-id
-        set color blue
-        set size 10
+        set size 6
         set heading 90  ;; face right
       ]
     ]
@@ -108,6 +128,30 @@ to move-units
   ]
 end
 
+to build-pontoon-bridges
+  foreach chosen-site-ids [site-id ->
+    let builders-ready site-full-of-builders? site-id
+    let num-pontoons-ready item site-id site-pontoon-count
+    let num-pontoons-req item site-id num-required-pontoons-per-site
+    let num-pontoon-pieces-built item site-id site-pontoon-built-count
+    let pontoon-bridge-built item site-id site-pontoon-bridge-built
+    if not pontoon-bridge-built [
+      ;; If all pieces are there, animate/draw the brdige
+      ifelse num-pontoon-pieces-built = num-pontoons-req [
+        ;; call draw-bridge
+        set site-pontoon-bridge-built replace-item site-id site-pontoon-bridge-built true
+      ] [
+        ;; Otherwise, if the necessary ppl/resources are there, add to the existing bridge
+        if builders-ready and (num-pontoons-ready >= 1) [
+          let current-total-pontoons-built total-pontoons-built
+          set total-pontoons-built (current-total-pontoons-built + 1)
+          set site-pontoon-built-count replace-item site-id site-pontoon-built-count (num-pontoon-pieces-built + 1)
+          set site-pontoon-count replace-item site-id site-pontoon-count (num-pontoons-ready - 1)
+        ]
+      ]
+    ]
+ ]
+end
 
 ;; ---------------- HELPER FUNCTIONS -----------------
 
@@ -178,35 +222,78 @@ to safe-forward-trucks [total-distance]
   let step-size 1
   let moved 0
   while [moved < total-distance] [
-    ;; Move only if there's no water ahead AND no close unit in front
-    ifelse (not water-ahead?) and (not trucks-close-ahead?) [
-      fd step-size
-      set moved moved + step-size
-    ]
-    [
-      stop
-    ]
+    ;; Move only if there's no close unit in front
+    ifelse (not trucks-close-ahead?) [
+      ;; If there's no water ahead, just move
+      ifelse (not water-ahead?) [
+        fd step-size
+        set moved moved + step-size
+      ]
+      ;; If there's water ahead
+      [
+        ;; If the site is not full, despawn and add pontoons
+        ifelse (not site-full-of-pontoons? site-num) [
+          site-add-pontoons
+        ] ;; If it is full already, wait at the bank
+        [stop]
+      ]
+
+    ] [stop]
   ]
 end
+
 
 ;; Prevents infantry from jumping past next truck or the water
 to safe-forward-infantry [total-distance]
   let step-size 1
   let moved 0
   while [moved < total-distance] [
-    ;; Move only if there's no water ahead AND no close unit in front
-    ifelse (not water-ahead?) and (not infantry-close-ahead?) [
-      fd step-size
-      set moved moved + step-size
-    ]
-    [
-      stop
-    ]
+    ;; Move only if there's no close unit in front
+    ifelse (not infantry-close-ahead?) [
+      ;; If there's no water ahead, just move as usual
+      ifelse (not water-ahead?) [
+        fd step-size
+        set moved moved + step-size
+      ]
+      ;; If there's water ahead
+      [
+        ;; If the site is not full, despawn and join builders
+        ifelse (not site-full-of-builders? site-num) [
+          site-add-builders
+        ] ;; If it is full already, wait at the bank
+        [stop]
+      ]
+
+    ] [stop]
   ]
 end
 
+;; For changing unit speed when they get off main roads as they approach river
 to-report on-dirt?
   report (xcor > dirt-roads-start-x)
+end
+
+to-report site-full-of-builders? [site-n]
+  let builder-ct item site-n site-builder-count
+  report builder-ct >= num-required-builders-per-site
+end
+
+to site-add-builders
+  let builder-ct item site-num site-builder-count
+  set site-builder-count replace-item site-num site-builder-count (builder-ct + num-troops)
+  die
+end
+
+to-report site-full-of-pontoons? [site-n]
+  let pontoon-ct item site-n site-pontoon-count
+  let required-ct item site-num num-required-pontoons-per-site
+  report pontoon-ct >= required-ct
+end
+
+to site-add-pontoons
+  let pontoon-ct item site-num site-pontoon-count
+  set site-pontoon-count replace-item site-num site-pontoon-count (pontoon-ct + num-pontoons)
+  die
 end
 @#$#@#$#@
 GRAPHICS-WINDOW
@@ -275,9 +362,64 @@ MONITOR
 478
 2372
 536
-site-is-spawning
+Whether Each Site Can Spawn More Units
 site-is-spawning
 0
+1
+14
+
+MONITOR
+1337
+580
+2377
+639
+Infantry Ready to Build at each Site
+site-builder-count
+17
+1
+14
+
+MONITOR
+1337
+687
+2376
+746
+Pontoons Modules Ready to be Built at each Site
+site-pontoon-count
+17
+1
+14
+
+MONITOR
+1340
+792
+2380
+850
+Number of Pontoon Modules Built at each Site
+site-pontoon-built-count
+17
+1
+14
+
+MONITOR
+1347
+897
+2381
+955
+Whether Each Site has completed Building its Bridge
+site-pontoon-bridge-built
+17
+1
+14
+
+MONITOR
+1350
+1010
+1675
+1069
+Total Number of Pontoon Modules Built
+total-pontoons-built
+17
 1
 14
 
