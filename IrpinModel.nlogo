@@ -5,8 +5,7 @@ globals [
   site-ys
   all-site-ids
   chosen-site-ids
-  site-troops-per-road
-  site-is-spawning
+  site-infantry-units-per-road
   site-builder-count
   site-pontoon-count
   site-pontoon-built-count
@@ -16,10 +15,8 @@ globals [
   time-of-last-site-activity
   site-current-activity-duration
   activity-cooldown-time
-  unit-spawn-spacing
-  unit-collision-spacing
-  infantry-squad-depth
-  truck-group-depth
+  infantry-unit-depth
+  truck-unit-depth
   infantry-road-speed
   truck-road-speed
   dirt-roads-start-x
@@ -39,8 +36,16 @@ globals [
   total-infantry-used
   total-pontoons-used
   total-infantry-casualties
-  curr-chosen-site-spawn-index
-  spawner-clogged
+  curr-spawn-index-infantry
+  curr-spawn-index-trucks
+  infantry-clogged?
+  trucks-clogged?
+  north-entry-clogged?
+  deployment-order
+  deployment-order-idx
+  deployment-order-len
+  north-entry-x
+  north-entry-y
 ]
 patches-own [terrain]
 breed [infantry infantryperson]
@@ -61,7 +66,7 @@ to setup
   set pontoon-color brown
   set goal-color approximate-rgb 252 252 60
 
-  set-patch-size 2
+  set-patch-size 1
   resize-world 0 459 0 624
 
   import-pcolors "NewIrpinMap.png"
@@ -73,7 +78,6 @@ end
 to initialize-params
   set all-site-ids [0 1 2 3 4 5 6 7 8 9 10 11 12]
   set site-ys [ 576 542 526 403 329 292 263 237 210 171 142 112 82]
-  set site-is-spawning [true true true true true true true true true true true true true]
   set site-builder-count [0 0 0 0 0 0 0 0 0 0 0 0 0]
   set num-required-builders-per-site 18
   set site-pontoon-count [0 0 0 0 0 0 0 0 0 0 0 0 0]
@@ -84,8 +88,6 @@ to initialize-params
   set time-of-last-site-activity [-1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1] ;; Default state, no activity yet at any site
   set site-current-activity-duration [0 0 0 0 0 0 0 0 0 0 0 0 0]
   set dirt-roads-start-x 235
-  set unit-spawn-spacing 10 ;; Ticks between group of infantry/trucks sent out. TODO - Parameterize this IV
-  set unit-collision-spacing 10
   set infantry-road-speed 4 ;; # of pixels moved per tick; About 4mph. Source: Map is 7.5mi wide and 460 pixels wide, troops march at about 4mph, ticks are 1min.
   set truck-road-speed 45 ;; Pixels per tick; About 44mph
   set infantry-dirt-speed 3 ;; Pixels per tick; About 3mph
@@ -94,14 +96,21 @@ to initialize-params
   set total-infantry-crossed 0
   set total-pontoons-built 0
   set total-infantry-casualties 0
-  set curr-chosen-site-spawn-index 0
-  set spawner-clogged false
+  set curr-spawn-index-infantry length chosen-site-ids - 1
+  set curr-spawn-index-trucks length chosen-site-ids - 1
+  set infantry-clogged? false
+  set trucks-clogged? false
+  set north-entry-clogged? false
+  set deployment-order ["infantry" "truck"]
+  set deployment-order-idx 0
+  set deployment-order-len length deployment-order
+  set north-entry-x 240
+  set north-entry-y 624
 
   ;; KEY PARAMETERS
-  set site-troops-per-road [6 6 6 6 6 6 6 6 6 6 6 6 16] ;; Based on real path/road widths at the site opening. THIS IS FAIRLY ACCURATE ESTIMATE.
-  set infantry-squad-depth 400 ;; Every 10ticks a squad moves 4pixels-per-tick = 40 pixels between squads = 0.65mi = ~1370 troops can fit in that space.
-  ;; But since trucks (11ft) wide must pass and take up roughly 60-70% of the road width, then only a max of 30% or 400 troops can actually be in this space. THIS IS HIGHEST REALISTIC DENSITY ESTIMATE.
-  set truck-group-depth 20 ;; Every 10ticks a group is sent out at 45pixels-per-tick, then ~21.5 PMP trucks can fit in that space. THIS IS HIGHEST REALISTIC DENSITY ESTIMATE.
+  set site-infantry-units-per-road [1 1 1 1 1 1 1 1 1 1 1 1 3] ;; Based on real path/road widths at the site opening. THIS IS FAIRLY ACCURATE ESTIMATE.
+  set infantry-unit-depth 10 ; Number of infantry unit passengers in BTR-80
+  set truck-unit-depth 10 ; Number of trucks represented by a truck unit
   set pontoon-module-setup-time 1 ;; In minutes; THIS IS UNDER IDEAL CONDITIONS. Each 22ft unit done in 1min, see odin website.
   set activity-cooldown-time 30 ;; 30min after last activity has been seen, the t in the artillery equation will be reset. THIS IS A SEMI ARBITRARY VALUE
   set artillery-alpha 0.035 ; 0.035 value used before
@@ -141,36 +150,44 @@ end
 
 to spawn-units
 
-  let site-id item curr-chosen-site-spawn-index chosen-site-ids
-  if not spawner-clogged [
-    let camp-y item site-id site-ys
-    let infantry-squad-width item site-id site-troops-per-road
-    let n-troops (infantry-squad-width * infantry-squad-depth)
-    let n-pontoons (truck-pontoon-module-capacity * truck-group-depth)
-    create-trucks 1 [ ;; = A line/group of trucks
-      setxy 240 624
-      set site-num site-id
-      set site-y item site-id site-ys
-      set num-pontoons n-pontoons
-      set speed truck-dirt-speed
-      set shape "truck"
-      set color black
-      set size 4
-      set heading 180  ;; face right
+  if not north-entry-clogged? [
+    let site-id-i item (curr-spawn-index-infantry mod length chosen-site-ids) chosen-site-ids
+    let site-id-t item (curr-spawn-index-trucks mod length chosen-site-ids) chosen-site-ids
+    let curr-deployment-idx (deployment-order-idx mod deployment-order-len)
+    let next-deployment-unit item curr-deployment-idx deployment-order
+    if next-deployment-unit = "infantry" [
+      let infantry-units-per-road item site-id-i site-infantry-units-per-road
+      let n-troops-in-unit infantry-unit-depth
+      create-infantry 1 [ ;; = A rectangular group of foot soldiers
+        setxy north-entry-x north-entry-y
+        set site-num site-id-i
+        set site-y item site-id-i site-ys
+        set num-troops n-troops-in-unit * infantry-units-per-road * 3; take away extra 3
+        set speed infantry-road-speed
+        set color white
+        set size 4
+        set heading 180
+      ]
+      set total-infantry-used (total-infantry-used + n-troops-in-unit)
+      set curr-spawn-index-infantry (curr-spawn-index-infantry - 1)
     ]
-    create-infantry 1 [ ;; = A rectangular group of foot soldiers
-      setxy 240 624
-      set site-num site-id
-      set site-y item site-id site-ys
-      set num-troops n-troops
-      set speed infantry-road-speed
-      set color white
-      set size 4
-      set heading 180  ;; face right
+    if next-deployment-unit = "truck" [
+      let n-pontoons (truck-pontoon-module-capacity * truck-unit-depth)
+      create-trucks 1 [ ;; = A line/group of trucks
+        setxy north-entry-x north-entry-y
+        set site-num site-id-t
+        set site-y item site-id-t site-ys
+        set num-pontoons n-pontoons * 3 ; take away 3
+        set speed truck-dirt-speed
+        set shape "truck"
+        set color black
+        set size 4
+        set heading 180
+      ]
+      set total-pontoons-used (total-pontoons-used + n-pontoons)
+      set curr-spawn-index-trucks (curr-spawn-index-trucks - 1)
     ]
-    set total-infantry-used (total-infantry-used + n-troops)
-    set total-pontoons-used (total-pontoons-used + n-pontoons)
-    set curr-chosen-site-spawn-index (curr-chosen-site-spawn-index + 1) mod length chosen-site-ids
+    set deployment-order-idx (deployment-order-idx + 1)
   ]
 end
 
@@ -181,7 +198,7 @@ to move-units
     let remaining-move speed
     while [remaining-move > 0 and move-ok?] [
       ;; Turning logic
-      maybe-turn-east self
+      turn-into-site-when-arrived self
       let terr-ahead terrain-ahead
       if (terr-ahead = "water" or (terr-ahead = "bridge" and breed = trucks)) [
         if breed = trucks and not site-full-of-pontoons? site-num [
@@ -199,14 +216,13 @@ to move-units
         die
       ]
       if (terr-ahead = "road") or (terr-ahead = "bridge" and breed = infantry) [
-
-        ;; Cone-based collision detection
         let blocked? false
+        ;; Cone-based collision detection
         if breed = trucks [
-           set blocked? any? other trucks in-cone (1 + step-size) 90 with [ distance myself < 5 ]
+          set blocked? any? other trucks in-cone (1 + step-size) 90 with [ distance myself < 5 ] ; edit (1 + X) to make collision boxes larger
         ]
         if breed = infantry [
-           set blocked? any? other infantry in-cone (1 + step-size) 90 with [ distance myself < 5 ]
+          set blocked? any? other infantry in-cone (1 + step-size) 90 with [ distance myself < 5 ]
         ]
         if blocked? = true [
           set move-ok? false
@@ -232,11 +248,11 @@ to move-units
   ]
 end
 
-to maybe-turn-east [ t ]
-  let target-y [site-y] of t
-  let tolerance 1  ;; Allow a small buffer for overshoot/undershoot
-  if abs ([ycor] of t - target-y) <= tolerance [
-    ask t [ set heading 90 ]  ;; Turn east
+to turn-into-site-when-arrived [ unit ]
+  let target-y [site-y] of unit
+  let tolerance 0.5  ;; Allow a small buffer for overshoot/undershoot
+  if abs (([ycor] of unit) - target-y) <= tolerance [
+    ask unit [ set heading 90 ]  ;; Turn east
   ]
 end
 
@@ -288,10 +304,10 @@ to drone-detect-and-artillery-fire
         let pDestroyed 1 - exp(- hazard * duration)
 
         if (ticks mod time-between-drone-checks = 0) and (random-float 1.0 < pDestroyed) [
-          print(word duration "dur, num" num-active-sites)
+          ;print(word duration "dur, num" num-active-sites)
           destroy-site site-id
-          print (word "💥 Bridge/troops at site " site-id " destroyed at tick " ticks ". Activity with Duration " duration " had artillery hit probability of " pDestroyed)
-          print (word "-----------------------------------------------------------------------")
+          ;print (word "💥 Bridge/troops at site " site-id " destroyed at tick " ticks ". Activity with Duration " duration " had artillery hit probability of " pDestroyed)
+          ;print (word "-----------------------------------------------------------------------")
         ]
       ]
     ]
@@ -343,20 +359,13 @@ to-report select-sites
 end
 
 ;; Prevents spawners from getting backed up when line reaches them
-to update-spawn-availability ;; TODO - update this to be unique to infantry and trucks
-  ;;foreach chosen-site-ids [site-id ->
-   ;;let camp-y item site-id site-ys
-    ;; Check if there's a unit near (0, camp-y)
-    let units-here turtles with [abs (xcor - 240) < 10 and abs (ycor - 624) < 10]
-
+to update-spawn-availability
+  let units-here turtles with [abs (xcor - north-entry-x) < 1 and abs (ycor - north-entry-y) < 1]
     ifelse any? units-here [
-      ;;set site-is-spawning replace-item site-id site-is-spawning false
-      set spawner-clogged true
+      set north-entry-clogged? true
     ] [
-      ;;set site-is-spawning replace-item site-id site-is-spawning true
-      set spawner-clogged false
+      set north-entry-clogged? false
     ]
-  ;;]
 end
 
 ;; Checks if there's a specific terrain type ahead (in front patch at distance 1).
@@ -537,13 +546,13 @@ end
 ;; TODO2: maybe animate blinking red shape in middle of where pontoon bridge was destroyed
 @#$#@#$#@
 GRAPHICS-WINDOW
-2407
-237
-3335
-1496
+671
+12
+1139
+646
 -1
 -1
-2.0
+1.0
 1
 10
 1
@@ -564,10 +573,10 @@ ticks
 30.0
 
 BUTTON
-2262
-336
-2329
-370
+598
+14
+665
+48
 NIL
 setup
 NIL
@@ -581,10 +590,10 @@ NIL
 1
 
 BUTTON
-2258
-436
-2324
-472
+599
+52
+665
+88
 NIL
 go
 T
@@ -598,179 +607,179 @@ NIL
 1
 
 MONITOR
-1318
-912
-2354
-969
-Whether Each Site Can Spawn More Units
-site-is-spawning
-0
-1
-14
-
-MONITOR
-1320
-1014
-2360
-1071
+3
+190
+452
+235
 Infantry Ready to Build at each Site
 site-builder-count
 17
 1
-14
+11
 
 MONITOR
-1320
-1122
-2359
-1179
+3
+239
+451
+284
 Pontoons Modules Ready to be Built at each Site
 site-pontoon-count
 0
 1
-14
+11
 
 MONITOR
-1322
-1226
-2358
-1283
+3
+289
+450
+334
 Number of Pontoon Modules Built at each Site
 site-pontoon-built-count
 0
 1
-14
+11
 
 MONITOR
-1326
-1396
-2354
-1453
+6
+391
+445
+436
 Whether Each Site has completed Building its Bridge
 site-pontoon-bridge-built
 17
 1
-14
+11
 
 MONITOR
-1708
-1488
-2033
-1545
+6
+491
+446
+536
 Total Number of Pontoon Modules Built
 total-pontoons-built
 0
 1
-14
+11
 
 MONITOR
-1320
-802
-1549
-859
+454
+190
+667
+235
 Number of Troops Crossed
 total-infantry-crossed
 17
 1
-14
+11
 
 MONITOR
-1328
-1490
-1663
-1547
+6
+441
+445
+486
 Time Of Last Building Activity at Each Site
 time-of-last-site-activity
 17
 1
-14
+11
 
 MONITOR
-1444
-426
-1670
-483
+54
+93
+208
+138
 Battle Status
 battle-outcome
 17
 1
-14
+11
 
 MONITOR
-1708
-426
-1914
-483
+213
+93
+405
+138
 Number of Infantry Used/Sent
 total-infantry-used
 17
 1
-14
+11
 
 MONITOR
-1950
-426
-2208
-483
+407
+93
+666
+138
 Number of Pontoon Modules Used/Sent
 total-pontoons-used
 17
 1
-14
+11
 
 MONITOR
-2068
-1490
-2280
-1547
+453
+289
+667
+334
 Number of Infantry Killed
 total-infantry-casualties
 17
 1
-14
+11
 
 MONITOR
-1592
-802
-1856
-859
+453
+240
+667
+285
 Infantry Casualty Ratio
 total-infantry-casualties / total-infantry-used
 4
 1
-14
+11
 
 MONITOR
-1324
-1312
-2358
-1369
+3
+339
+446
+384
 Percent Completion of Pontoon Bridge at Each Site
 map [[a b] -> round (100 * (a / b))] site-pontoon-built-count num-required-pontoons-per-site
 0
 1
-14
+11
 
 CHOOSER
-1452
-324
-1656
-369
+387
+27
+591
+72
 site-selection-mode
 site-selection-mode
 "01 Shortest Bridges" "02 Shortest Bridges" "03 Shortest Bridges" "04 Shortest Bridges" "05 Shortest Bridges" "06 Shortest Bridges" "07 Shortest Bridges" "08 Shortest Bridges" "09 Shortest Bridges" "10 Shortest Bridges" "11 Shortest Bridges" "12 Shortest Bridges" "13 Shortest Bridges"
 12
 
 MONITOR
-1894
-804
-2090
-861
-Entry Road Clogged
-spawner-clogged
+450
+390
+668
+435
+North Road/Entry Clogged
+north-entry-clogged?
 17
 1
-14
+11
+
+MONITOR
+452
+338
+667
+383
+Average Bridge Completion (Percent)
+mean (map [[a b] -> round (100 * (a / b))] site-pontoon-built-count num-required-pontoons-per-site)
+0
+1
+11
 
 @#$#@#$#@
 ## WHAT IS IT?
