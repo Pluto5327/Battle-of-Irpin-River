@@ -256,6 +256,7 @@ to move-units
     update-max-speed
     let ahead-blocked? false
 
+    ;; 前方障害物チェック
     if breed = trucks [
       set ahead-blocked? any? other trucks in-cone 10 60 with [ distance myself < 8 ]
       set ahead-blocked? ahead-blocked? or any? infantry in-cone 10 60 with [ distance myself < 8 ]
@@ -265,15 +266,18 @@ to move-units
       set ahead-blocked? ahead-blocked? or any? trucks in-cone 10 60 with [ distance myself < 8 ]
     ]
 
+    ;; 加速または減速
     ifelse ahead-blocked? [
+      ;; 前方に障害物がある場合は減速
       set current-speed max (list 0 (current-speed - decel))
     ] [
+      ;; 障害物がない場合は加速（最大速度まで）
       set current-speed min (list speed (current-speed + accel))
     ]
 
     let step-size 1
     set move-ok? true
-    let remaining-move current-speed
+    let remaining-move speed
 
     while [remaining-move > 0 and move-ok?] [
       ;; Turning logic
