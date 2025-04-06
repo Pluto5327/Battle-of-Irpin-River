@@ -46,6 +46,8 @@ globals [
   deployment-order-len
   north-entry-x
   north-entry-y
+
+  ; iv3-selection
 ]
 patches-own [terrain]
 breed [infantry infantryperson]
@@ -60,6 +62,8 @@ trucks-own [site-num num-pontoons]
 
 to setup
   clear-all
+
+  ; set iv3-selection iv3-spacing-waves
 
   ;; Convert RGB to NetLogo color numbers
   set water-color approximate-rgb 4 36 194
@@ -88,7 +92,7 @@ to initialize-params
   set time-of-last-site-activity [-1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1] ;; Default state, no activity yet at any site
   set site-current-activity-duration [0 0 0 0 0 0 0 0 0 0 0 0 0]
   set dirt-roads-start-x 235
-  set infantry-road-speed 4 ;; # of pixels moved per tick; About 4mph. Source: Map is 7.5mi wide and 460 pixels wide, troops march at about 4mph, ticks are 1min.
+  set infantry-road-speed 45 ;; # of pixels moved per tick; About 4mph. Source: Map is 7.5mi wide and 460 pixels wide, troops march at about 4mph, ticks are 1min.
   set truck-road-speed 45 ;; Pixels per tick; About 44mph
   set infantry-dirt-speed 3 ;; Pixels per tick; About 3mph
   set truck-dirt-speed 15 ;; Pixels per tick; About 15mph
@@ -155,10 +159,11 @@ to spawn-units
     let site-id-t item (curr-spawn-index-trucks mod length chosen-site-ids) chosen-site-ids
     let curr-deployment-idx (deployment-order-idx mod deployment-order-len)
     let next-deployment-unit item curr-deployment-idx deployment-order
+
     if next-deployment-unit = "infantry" [
       let infantry-units-per-road item site-id-i site-infantry-units-per-road
       let n-troops-in-unit infantry-unit-depth
-      create-infantry 1 [ ;; = A rectangular group of foot soldiers
+      create-infantry 1 [ ;; = A rectangular group of infantry on trucks
         setxy north-entry-x north-entry-y
         set site-num site-id-i
         set site-y item site-id-i site-ys
@@ -220,9 +225,12 @@ to move-units
         ;; Cone-based collision detection
         if breed = trucks [
           set blocked? any? other trucks in-cone (1 + step-size) 90 with [ distance myself < 5 ] ; edit (1 + X) to make collision boxes larger
+           set blocked? blocked? or any? infantry in-cone (1 + step-size) 90 with [ distance myself < 5 ]
         ]
         if breed = infantry [
           set blocked? any? other infantry in-cone (1 + step-size) 90 with [ distance myself < 5 ]
+          set blocked? any? other trucks in-cone (1 + step-size) 90 with [ distance myself < 5 ]
+
         ]
         if blocked? = true [
           set move-ok? false
