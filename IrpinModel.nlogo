@@ -27,6 +27,7 @@ globals [
   num-required-pontoons-per-site
   pontoon-module-setup-time
   artillery-alpha
+  artillery-beta
   time-between-drone-checks
   total-pontoons-built
   total-infantry-crossed
@@ -150,13 +151,14 @@ to initialize-params
   ;; KEY PARAMETERS
   set site-infantry-units-per-road [1 1 1 1 1 1 1 1 1 1 1 1 3] ;; Based on real path/road widths at the site opening. THIS IS FAIRLY ACCURATE ESTIMATE.
   set infantry-unit-depth 10 ; Number of infantry unit passengers in BTR-80
-  set truck-unit-depth 10 ; Number of trucks represented by a truck unit
+  set truck-unit-depth 1 ; Number of trucks represented by a truck unit
   set pontoon-module-setup-time 1 ;; In minutes; THIS IS UNDER IDEAL CONDITIONS. Each 22ft unit done in 1min, see odin website.
   set activity-cooldown-time 30 ;; 30min after last activity has been seen, the t in the artillery equation will be reset. THIS IS A SEMI ARBITRARY VALUE
-  set artillery-alpha 0.035 ; 0.035 value used before
-  set time-between-drone-checks 10 ;; 10min
+  set artillery-alpha 0.06 ; 0.035 value used before
+  set artillery-beta 0.05
+  set time-between-drone-checks 20 ;; 10min
   set win-num-crossers-threshold 4500 ;; 4500 troops (NOTE: EACH INFANTRY AGENT HAS NUM-TROOPS)
-  set loss-battle-duration-threshold 28 * 24 * 60 ;; 28days (in minutes) = 28days * 24hrs * 60min
+  set loss-battle-duration-threshold 750 ;28 * 24 * 60 ;; 28days (in minutes) = 28days * 24hrs * 60min
 
   ;; Dependent Variables
   set total-infantry-used 0
@@ -228,8 +230,8 @@ to go
   update-spawn-availability
   spawn-units
   build-pontoon-bridges
-  drone-detect-and-artillery-fire
-  if battle-over? [stop]
+  if turn-on-artillery? [drone-detect-and-artillery-fire]
+  if turn-on-stop-conditions? [if battle-over? [stop]]
   tick ;; IMPORTANT: each represents 1min
 end
 
@@ -301,7 +303,7 @@ to spawn-units-from-entry [entry-point]
         setxy entry-x entry-y
         set site-num site-id-i
         set site-y item site-id-i site-ys
-        set num-troops n-troops-in-unit * infantry-units-per-road * 3; take away extra 3
+        set num-troops n-troops-in-unit * infantry-units-per-road * 10; take away extra 3
         set speed infantry-road-speed
         set color white
         set size 4
@@ -328,7 +330,7 @@ to spawn-units-from-entry [entry-point]
         setxy entry-x entry-y
         set site-num site-id-t
         set site-y item site-id-t site-ys
-        set num-pontoons n-pontoons * 3 ; take away 3
+        set num-pontoons n-pontoons * 10; take away 3
         set speed truck-dirt-speed
         set shape "truck"
         set color black
@@ -546,13 +548,12 @@ to drone-detect-and-artillery-fire
     if was-site-attacked-recently? site-id [
       let duration item site-id site-current-activity-duration
       if duration > 45 [
-        let hazard (artillery-alpha / num-active-sites)
-        let pDestroyed 1 - exp(- hazard * duration)
+        let pDestroyed max(list 0 (1 - artillery-alpha * num-active-sites)) * (1 - exp(-1 * artillery-beta * (duration - 45)))
 
         if (ticks mod time-between-drone-checks = 0) and (random-float 1.0 < pDestroyed) [
           ;print(word duration "dur, num" num-active-sites)
           destroy-site site-id
-          ;print (word "💥 Bridge/troops at site " site-id " destroyed at tick " ticks ". Activity with Duration " duration " had artillery hit probability of " pDestroyed)
+          print (word "💥 Bridge/troops at site " site-id " destroyed at tick " ticks ". Activity with Duration " duration " had artillery hit probability of " pDestroyed " with num sites " num-active-sites )
           ;print (word "-----------------------------------------------------------------------")
         ]
       ]
@@ -578,9 +579,9 @@ end
 
 to-report select-sites
   ;; step 1: Define the site groups in the order north, west, south
-  let north-sites [0 1 2 3 4]
-  let west-sites [5 6 7 8]
-  let south-sites [9 10 11 12]
+  let north-sites-sorted [3 1 2 4 0]
+  let west-sites-sorted [5 6 7 8]
+  let south-sites-sorted [12 11 9 10]
 
   ;; step 2: Extract the number of sites to use
   let num-sites-literal substring site-selection-mode 0 2
@@ -591,17 +592,17 @@ to-report select-sites
 
   ;; step 4: Add sites in the order north, west, south, selecting from largest to smallest within each group
   while [length selected-site-ids < num-sites] [
-    if length selected-site-ids < num-sites and not empty? north-sites [
-      set selected-site-ids lput (first north-sites) selected-site-ids
-      set north-sites but-first north-sites
+    if length selected-site-ids < num-sites and not empty? north-sites-sorted [
+      set selected-site-ids lput (first north-sites-sorted) selected-site-ids
+      set north-sites-sorted but-first north-sites-sorted
     ]
-    if length selected-site-ids < num-sites and not empty? west-sites [
-      set selected-site-ids lput (first west-sites) selected-site-ids
-      set west-sites but-first west-sites
+    if length selected-site-ids < num-sites and not empty? west-sites-sorted [
+      set selected-site-ids lput (first west-sites-sorted) selected-site-ids
+      set west-sites-sorted but-first west-sites-sorted
     ]
-    if length selected-site-ids < num-sites and not empty? south-sites [
-      set selected-site-ids lput (first south-sites) selected-site-ids
-      set south-sites but-first south-sites
+    if length selected-site-ids < num-sites and not empty? south-sites-sorted [
+      set selected-site-ids lput (first south-sites-sorted) selected-site-ids
+      set south-sites-sorted but-first south-sites-sorted
     ]
   ]
 
@@ -827,13 +828,9 @@ to update-max-speed
   ]
 end
 
-
-
-;;; The old Todo
-;; TODO: Update troop/pontoon depths per agent for new collision boxes
 ;; BUG: decimal pontoon setup times dont always work
 ;; TODO1: Add dropdown menu for IV3 - spacing/waves
-;; TODO2: maybe animate blinking red shape in middle of where pontoon bridge was destroyed
+;; TODO2: maybe animate blinking red shape at site when destroyed
 @#$#@#$#@
 GRAPHICS-WINDOW
 671
@@ -1023,7 +1020,7 @@ MONITOR
 667
 285
 Infantry Casualty Ratio
-total-infantry-casualties / total-infantry-used
+total-infantry-casualties / (total-infantry-used * 10)
 4
 1
 11
@@ -1089,6 +1086,39 @@ MONITOR
 536
 South Road/Entry Clogged
 south-entry-clogged?
+17
+1
+11
+
+SWITCH
+5
+149
+192
+182
+turn-on-artillery?
+turn-on-artillery?
+0
+1
+-1000
+
+SWITCH
+197
+149
+416
+182
+turn-on-stop-conditions?
+turn-on-stop-conditions?
+0
+1
+-1000
+
+MONITOR
+452
+541
+667
+586
+Max Bridge Completion (Percent)
+max (map [[a b] -> round (100 * (a / b))] site-pontoon-built-count num-required-pontoons-per-site)
 17
 1
 11
@@ -1440,14 +1470,34 @@ NetLogo 6.4.0
 @#$#@#$#@
 @#$#@#$#@
 <experiments>
-  <experiment name="SiteSelectionSweep" repetitions="100" runMetricsEveryStep="true">
+  <experiment name="Varying Site-Selection With No Artillery Active" repetitions="1" runMetricsEveryStep="false">
     <setup>setup</setup>
     <go>go</go>
+    <metric>ticks</metric>
     <metric>total-infantry-used</metric>
     <metric>total-pontoons-used</metric>
     <metric>battle-outcome</metric>
+    <runMetricsCondition>battle-outcome = "Victory" or battle-outcome = "Retreat" or ticks &gt; 749</runMetricsCondition>
+    <enumeratedValueSet variable="turn-on-artillery?">
+      <value value="false"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="turn-on-stop-conditions?">
+      <value value="true"/>
+    </enumeratedValueSet>
     <enumeratedValueSet variable="site-selection-mode">
+      <value value="&quot;01 Shortest Bridges&quot;"/>
       <value value="&quot;02 Shortest Bridges&quot;"/>
+      <value value="&quot;03 Shortest Bridges&quot;"/>
+      <value value="&quot;04 Shortest Bridges&quot;"/>
+      <value value="&quot;05 Shortest Bridges&quot;"/>
+      <value value="&quot;06 Shortest Bridges&quot;"/>
+      <value value="&quot;07 Shortest Bridges&quot;"/>
+      <value value="&quot;08 Shortest Bridges&quot;"/>
+      <value value="&quot;09 Shortest Bridges&quot;"/>
+      <value value="&quot;10 Shortest Bridges&quot;"/>
+      <value value="&quot;11 Shortest Bridges&quot;"/>
+      <value value="&quot;12 Shortest Bridges&quot;"/>
+      <value value="&quot;13 Shortest Bridges&quot;"/>
     </enumeratedValueSet>
   </experiment>
 </experiments>
