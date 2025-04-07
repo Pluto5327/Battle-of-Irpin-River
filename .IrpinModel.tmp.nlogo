@@ -40,12 +40,15 @@ globals [
   curr-spawn-index-trucks
   infantry-clogged?
   trucks-clogged?
-  north-entry-clogged?
   deployment-order
   deployment-order-idx
   deployment-order-len
   north-entry-x
   north-entry-y
+  west-entry-x
+  west-entry-y
+  south-entry-x
+  south-entry-y
 
   ;; Acceleration Decelration New Variable
   infantry-max-road-speed
@@ -56,6 +59,26 @@ globals [
   truck-acceleration
   infantry-deceleration
   truck-deceleration
+
+  ;; Congestion at Entry points
+  north-entry-clogged?
+  west-entry-clogged?
+  south-entry-clogged?
+
+  north-entry-sites
+  west-entry-sites
+  south-entry-sites
+
+  curr-spawn-index-infantry-north
+  curr-spawn-index-infantry-west
+  curr-spawn-index-infantry-south
+  curr-spawn-index-trucks-north
+  curr-spawn-index-trucks-west
+  curr-spawn-index-trucks-south
+
+  deployment-order-idx-north
+  deployment-order-idx-west
+  deployment-order-idx-south
 
   ;; iv3-selection
 ]
@@ -111,7 +134,7 @@ to initialize-params
   set dirt-roads-start-x 235
   set infantry-road-speed 45 ;; # of pixels moved per tick; About 4mph. Source: Map is 7.5mi wide and 460 pixels wide, troops march at about 4mph, ticks are 1min.
   set truck-road-speed 45 ;; Pixels per tick; About 44mph
-  set infantry-dirt-speed 3 ;; Pixels per tick; About 3mph
+  set infantry-dirt-speed  ;; Pixels per tick; About 3mph
   set truck-dirt-speed 15 ;; Pixels per tick; About 15mph
   set truck-pontoon-module-capacity 1
   set total-infantry-crossed 0
@@ -125,8 +148,6 @@ to initialize-params
   set deployment-order ["infantry" "truck"]
   set deployment-order-idx 0
   set deployment-order-len length deployment-order
-  set north-entry-x 240
-  set north-entry-y 624
 
   ;; KEY PARAMETERS
   set site-infantry-units-per-road [1 1 1 1 1 1 1 1 1 1 1 1 3] ;; Based on real path/road widths at the site opening. THIS IS FAIRLY ACCURATE ESTIMATE.
@@ -160,6 +181,39 @@ to initialize-params
   set infantry-dirt-speed 0
   set truck-dirt-speed 0
 
+  ;; Coordiantes of the Entry points
+  ;; The values of the entry points will be fixed
+  set north-entry-x 240
+  set north-entry-y 624
+  set west-entry-x 0
+  set west-entry-y 300
+  set south-entry-x 100
+  set south-entry-y 0
+
+    set north-entry-clogged? false
+  set west-entry-clogged? false
+  set south-entry-clogged? false
+
+  set north-entry-sites [0 1 2 3 4]
+  set west-entry-sites [5 6 7 8]
+  set south-entry-sites [9 10 11 12]
+
+  set curr-spawn-index-infantry-north length north-entry-sites - 1
+  set curr-spawn-index-infantry-west length west-entry-sites - 1
+  set curr-spawn-index-infantry-south length south-entry-sites - 1
+  set curr-spawn-index-trucks-north length north-entry-sites - 1
+  set curr-spawn-index-trucks-west length west-entry-sites - 1
+  set curr-spawn-index-trucks-south length south-entry-sites - 1
+
+  set deployment-order-idx-north 0
+  set deployment-order-idx-west 0
+  set deployment-order-idx-south 0
+
+  ;; Keep old global variables for backward compatibility
+  set curr-spawn-index-infantry curr-spawn-index-infantry-north
+  set curr-spawn-index-trucks curr-spawn-index-trucks-north
+  set deployment-order-idx deployment-order-idx-north
+
   update-bridge-drawing-x-values
 end
 
@@ -185,70 +239,116 @@ end
 ;; ----------------- MAIN FUNCTIONS ------------------
 ;; ---------------------------------------------------
 
-to spawn-units
 
-  if not north-entry-clogged? [
-    let site-id-i item (curr-spawn-index-infantry mod length chosen-site-ids) chosen-site-ids
-    let site-id-t item (curr-spawn-index-trucks mod length chosen-site-ids) chosen-site-ids
-    let curr-deployment-idx (deployment-order-idx mod deployment-order-len)
+
+to spawn-units
+  spawn-units-from-entry "north"
+  spawn-units-from-entry "west"
+  spawn-units-from-entry "south"
+end
+
+to spawn-units-from-entry [entry-point]
+  let entry-x 0
+  let entry-y 0
+  let entry-clogged? false
+  let entry-sites []
+  let curr-idx-infantry 0
+  let curr-idx-trucks 0
+  let depl-idx 0
+  let initial-heading 0
+
+  if entry-point = "north" [
+    set entry-x north-entry-x
+    set entry-y north-entry-y
+    set entry-clogged? north-entry-clogged?
+    set entry-sites north-entry-sites
+    set curr-idx-infantry curr-spawn-index-infantry-north
+    set curr-idx-trucks curr-spawn-index-trucks-north
+    set depl-idx deployment-order-idx-north
+    set initial-heading 180
+  ]
+  if entry-point = "west" [
+    set entry-x west-entry-x
+    set entry-y west-entry-y
+    set entry-clogged? west-entry-clogged?
+    set entry-sites west-entry-sites
+    set curr-idx-infantry curr-spawn-index-infantry-west
+    set curr-idx-trucks curr-spawn-index-trucks-west
+    set depl-idx deployment-order-idx-west
+    set initial-heading 90
+  ]
+  if entry-point = "south" [
+    set entry-x south-entry-x
+    set entry-y south-entry-y
+    set entry-clogged? south-entry-clogged?
+    set entry-sites south-entry-sites
+    set curr-idx-infantry curr-spawn-index-infantry-south
+    set curr-idx-trucks curr-spawn-index-trucks-south
+    set depl-idx deployment-order-idx-south
+    set initial-heading 0
+  ]
+
+  if not entry-clogged? and not empty? entry-sites [
+    let site-id-i item (curr-idx-infantry mod length entry-sites) entry-sites
+    let site-id-t item (curr-idx-trucks mod length entry-sites) entry-sites
+    let curr-deployment-idx (depl-idx mod deployment-order-len)
     let next-deployment-unit item curr-deployment-idx deployment-order
 
     if next-deployment-unit = "infantry" [
       let infantry-units-per-road item site-id-i site-infantry-units-per-road
       let n-troops-in-unit infantry-unit-depth
-
-      create-infantry 1 [ ;; = A rectangular group of infantry on trucks
-        setxy north-entry-x north-entry-y
+      create-infantry 1 [
+        setxy entry-x entry-y
         set site-num site-id-i
         set site-y item site-id-i site-ys
-        set num-troops n-troops-in-unit * infantry-units-per-road * 3; take away extra 3
+        set num-troops n-troops-in-unit * infantry-units-per-road * 3
         set speed infantry-road-speed
         set color white
         set size 4
-        set heading 180
-
-        set current-speed 0
-        set accel infantry-acceleration
-        set decel infantry-deceleration
-        ifelse on-dirt? [
-          set speed infantry-max-dirt-speed
-        ] [
-          set speed infantry-max-road-speed
-        ]
+        set heading initial-heading
       ]
-
       set total-infantry-used (total-infantry-used + n-troops-in-unit)
-      set curr-spawn-index-infantry (curr-spawn-index-infantry - 1)
+      set curr-idx-infantry (curr-idx-infantry - 1)
     ]
 
     if next-deployment-unit = "truck" [
       let n-pontoons (truck-pontoon-module-capacity * truck-unit-depth)
-      create-trucks 1 [ ;; = A line/group of trucks
-        setxy north-entry-x north-entry-y
+      create-trucks 1 [
+        setxy entry-x entry-y
         set site-num site-id-t
         set site-y item site-id-t site-ys
-        set num-pontoons n-pontoons * 3 ; take away 3
+        set num-pontoons n-pontoons * 3
         set speed truck-dirt-speed
         set shape "truck"
         set color black
         set size 4
-        set heading 180
-
-        set current-speed 0
-        set accel truck-acceleration
-        set decel truck-deceleration
-        ifelse on-dirt? [
-          set speed truck-max-dirt-speed
-        ] [
-          set speed truck-max-road-speed
-        ]
+        set heading initial-heading
       ]
       set total-pontoons-used (total-pontoons-used + n-pontoons)
-      set curr-spawn-index-trucks (curr-spawn-index-trucks - 1)
+      set curr-idx-trucks (curr-idx-trucks - 1)
     ]
-    set deployment-order-idx (deployment-order-idx + 1)
+
+    set depl-idx (depl-idx + 1)
+
+    ;; Saving Variablesj
+    if entry-point = "north" [
+      set curr-spawn-index-infantry-north curr-idx-infantry
+      set curr-spawn-index-trucks-north curr-idx-trucks
+      set deployment-order-idx-north depl-idx
+    ]
+    if entry-point = "west" [
+      set curr-spawn-index-infantry-west curr-idx-infantry
+      set curr-spawn-index-trucks-west curr-idx-trucks
+      set deployment-order-idx-west depl-idx
+    ]
+    if entry-point = "south" [
+      set curr-spawn-index-infantry-south curr-idx-infantry
+      set curr-spawn-index-trucks-south curr-idx-trucks
+      set deployment-order-idx-south depl-idx
+    ]
   ]
 end
+
 
 to move-units
   ask turtles [
@@ -256,7 +356,6 @@ to move-units
     update-max-speed
     let ahead-blocked? false
 
-    ;; 前方障害物チェック
     if breed = trucks [
       set ahead-blocked? any? other trucks in-cone 10 60 with [ distance myself < 8 ]
       set ahead-blocked? ahead-blocked? or any? infantry in-cone 10 60 with [ distance myself < 8 ]
@@ -266,18 +365,15 @@ to move-units
       set ahead-blocked? ahead-blocked? or any? trucks in-cone 10 60 with [ distance myself < 8 ]
     ]
 
-    ;; 加速または減速
     ifelse ahead-blocked? [
-      ;; 前方に障害物がある場合は減速
       set current-speed max (list 0 (current-speed - decel))
     ] [
-      ;; 障害物がない場合は加速（最大速度まで）
       set current-speed min (list speed (current-speed + accel))
     ]
 
     let step-size 1
     set move-ok? true
-    let remaining-move speed
+    let remaining-move current-speed
 
     while [remaining-move > 0 and move-ok?] [
       ;; Turning logic
@@ -338,9 +434,46 @@ end
 
 to turn-into-site-when-arrived [ unit ]
   let target-y [site-y] of unit
+  let target-site-num [site-num] of unit
   let tolerance 0.5  ;; Allow a small buffer for overshoot/undershoot
+
+  let entry-type "unknown"
+  if member? target-site-num north-entry-sites [
+    set entry-type "north"
+  ]
+  if member? target-site-num west-entry-sites [
+    set entry-type "west"
+  ]
+  if member? target-site-num south-entry-sites [
+    set entry-type "south"
+  ]
+
+  if entry-type = "north" [
+    if abs (([ycor] of unit) - target-y) <= tolerance [
+      ask unit [ set heading 90 ]  ;; 東向き
+    ]
+  ]
+  if entry-type = "west" [
+    if [xcor] of unit > 240 [
+      ifelse [ycor] of unit < target-y [
+        ask unit [ set heading 0 ]
+      ] [
+        ask unit [ set heading 180 ]
+      ]
+      if abs (([ycor] of unit) - target-y) <= tolerance [
+        ask unit [ set heading 90 ]
+      ]
+    ]
+  ]
+  if entry-type = "south" [
+    if abs (([ycor] of unit) - target-y) <= tolerance [
+      ask unit [ set heading 90 ]
+    ]
+  ]
+
+
   if abs (([ycor] of unit) - target-y) <= tolerance [
-    ask unit [ set heading 90 ]  ;; Turn east
+    ask unit [ set heading 90 ]
   ]
 end
 
@@ -448,12 +581,27 @@ end
 
 ;; Prevents spawners from getting backed up when line reaches them
 to update-spawn-availability
-  let units-here turtles with [abs (xcor - north-entry-x) < 1 and abs (ycor - north-entry-y) < 1]
-    ifelse any? units-here [
-      set north-entry-clogged? true
-    ] [
-      set north-entry-clogged? false
-    ]
+
+  let units-here-north turtles with [abs (xcor - north-entry-x) < 1 and abs (ycor - north-entry-y) < 1]
+  ifelse any? units-here-north [
+    set north-entry-clogged? true
+  ] [
+    set north-entry-clogged? false
+  ]
+
+  let units-here-west turtles with [abs (xcor - west-entry-x) < 1 and abs (ycor - west-entry-y) < 1]
+  ifelse any? units-here-west [
+    set west-entry-clogged? true
+  ] [
+    set west-entry-clogged? false
+  ]
+
+  let units-here-south turtles with [abs (xcor - south-entry-x) < 1 and abs (ycor - south-entry-y) < 1]
+  ifelse any? units-here-south [
+    set south-entry-clogged? true
+  ] [
+    set south-entry-clogged? false
+  ]
 end
 
 ;; Checks if there's a specific terrain type ahead (in front patch at distance 1).
@@ -649,6 +797,9 @@ to update-max-speed
   ]
 end
 
+
+
+;;; The old Todo
 ;; TODO: Update troop/pontoon depths per agent for new collision boxes
 ;; BUG: decimal pontoon setup times dont always work
 ;; TODO1: Add dropdown menu for IV3 - spacing/waves
