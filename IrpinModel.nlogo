@@ -262,7 +262,7 @@ to spawn-units-from-entry [entry-point]
     set entry-x north-entry-x
     set entry-y north-entry-y
     set entry-clogged? north-entry-clogged?
-    set entry-sites north-entry-sites
+    set entry-sites filter [ site -> member? site chosen-site-ids ] north-entry-sites
     set curr-idx-infantry curr-spawn-index-infantry-north
     set curr-idx-trucks curr-spawn-index-trucks-north
     set depl-idx deployment-order-idx-north
@@ -272,7 +272,7 @@ to spawn-units-from-entry [entry-point]
     set entry-x west-entry-x
     set entry-y west-entry-y
     set entry-clogged? west-entry-clogged?
-    set entry-sites west-entry-sites
+    set entry-sites filter [ site -> member? site chosen-site-ids ] west-entry-sites
     set curr-idx-infantry curr-spawn-index-infantry-west
     set curr-idx-trucks curr-spawn-index-trucks-west
     set depl-idx deployment-order-idx-west
@@ -282,7 +282,7 @@ to spawn-units-from-entry [entry-point]
     set entry-x south-entry-x
     set entry-y south-entry-y
     set entry-clogged? south-entry-clogged?
-    set entry-sites south-entry-sites
+    set entry-sites filter [ site -> member? site chosen-site-ids ] south-entry-sites
     set curr-idx-infantry curr-spawn-index-infantry-south
     set curr-idx-trucks curr-spawn-index-trucks-south
     set depl-idx deployment-order-idx-south
@@ -323,9 +323,9 @@ to spawn-units-from-entry [entry-point]
       set curr-idx-infantry (curr-idx-infantry - 1)
     ]
 
-
     if next-deployment-unit = "truck" [
       let n-pontoons (truck-pontoon-module-capacity * truck-unit-depth)
+
       create-trucks 1 [ ;; = A line/group of trucks
         setxy entry-x entry-y
         set site-num site-id-t
@@ -346,6 +346,7 @@ to spawn-units-from-entry [entry-point]
           set speed truck-max-road-speed
         ]
       ]
+
       set total-pontoons-used (total-pontoons-used + n-pontoons)
       set curr-idx-trucks (curr-idx-trucks - 1)
     ]
