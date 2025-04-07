@@ -9,7 +9,7 @@ TODO:
 - b) Addition: Add extra turn east and turn north to south-entry movement path, that roughly follows black and grey line
 - c) Fix (more urgent): make sure no random stoppages happen in the middle of the road with no reason (double check for movement bugs)
 - d) Fix (not urgent): Casualty ratio in UI monitor showing values greater than 1 currently
-- 4) Vary (i.e. create dropdown menus) for the other 2 independent variables. they should already have hardcoded params in the code, they should just now accept UI mrnu input to configure them:
+- 4) Vary (i.e. create dropdown menus) for the other 2 independent variables. they should already have hardcoded params in the code, they should just now accept UI menu input to configure them:
   a) waving/spacing
   b) ordering
 - 5) Run behavior space tests
