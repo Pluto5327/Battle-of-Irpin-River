@@ -185,8 +185,8 @@ to initialize-params
   ;; The values of the entry points will be fixed
   set north-entry-x 240
   set north-entry-y 624
-  set west-entry-x 0
-  set west-entry-y 300
+  set west-entry-x 10
+  set west-entry-y 260
   set south-entry-x 60
   set south-entry-y 0
 
@@ -230,7 +230,7 @@ to go
   update-spawn-availability
   spawn-units
   build-pontoon-bridges
-  drone-detect-and-artillery-fire
+  ;drone-detect-and-artillery-fire
   if battle-over? [stop]
   tick ;; IMPORTANT: each represents 1min
 end
@@ -375,17 +375,16 @@ end
 
 to move-units
   ask turtles [
-
     update-max-speed
     let ahead-blocked? false
 
     if breed = trucks [
-      set ahead-blocked? any? other trucks in-cone 10 60 with [ distance myself < 8 ]
-      set ahead-blocked? ahead-blocked? or any? infantry in-cone 10 60 with [ distance myself < 8 ]
+      set ahead-blocked? any? other trucks in-cone 10 60 with [ distance myself < 15 ]
+      set ahead-blocked? ahead-blocked? or any? infantry in-cone 10 60 with [ distance myself < 15 ]
     ]
     if breed = infantry [
-      set ahead-blocked? any? other infantry in-cone 10 60 with [ distance myself < 8 ]
-      set ahead-blocked? ahead-blocked? or any? trucks in-cone 10 60 with [ distance myself < 8 ]
+      set ahead-blocked? any? other infantry in-cone 10 60 with [ distance myself < 15 ]
+      set ahead-blocked? ahead-blocked? or any? trucks in-cone 10 60 with [ distance myself < 15 ]
     ]
 
     ifelse ahead-blocked? [
@@ -601,7 +600,11 @@ to-report select-sites
   ;; Step 3: Sort those site-pairs by required pontoons (ascending)
   let sorted-pairs sort-by [[a b] -> item 1 a < item 1 b] site-pairs
 
-  ;; Step 4: Choose top `num-sites` site-ids
+
+  ;; Step 4: Randomly shuffle the sorted pairs
+  set sorted-pairs n-values length sorted-pairs [ one-of remove-duplicates sorted-pairs ]
+
+  ;; Step 5: Choose top `num-sites` site-ids
   let selected-site-ids []
   (foreach sublist sorted-pairs 0 num-sites [
     [pair] -> set selected-site-ids lput (item 0 pair) selected-site-ids
@@ -1047,7 +1050,7 @@ CHOOSER
 site-selection-mode
 site-selection-mode
 "01 Shortest Bridges" "02 Shortest Bridges" "03 Shortest Bridges" "04 Shortest Bridges" "05 Shortest Bridges" "06 Shortest Bridges" "07 Shortest Bridges" "08 Shortest Bridges" "09 Shortest Bridges" "10 Shortest Bridges" "11 Shortest Bridges" "12 Shortest Bridges" "13 Shortest Bridges"
-12
+4
 
 MONITOR
 450
