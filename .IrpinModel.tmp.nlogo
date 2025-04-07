@@ -298,16 +298,27 @@ to spawn-units-from-entry [entry-point]
     if next-deployment-unit = "infantry" [
       let infantry-units-per-road item site-id-i site-infantry-units-per-road
       let n-troops-in-unit infantry-unit-depth
-      create-infantry 1 [
+
+      create-infantry 1 [ ;; = A rectangular group of infantry on trucks
         setxy entry-x entry-y
         set site-num site-id-i
         set site-y item site-id-i site-ys
-        set num-troops n-troops-in-unit * infantry-units-per-road * 3
+        set num-troops n-troops-in-unit * infantry-units-per-road * 3; take away extra 3
         set speed infantry-road-speed
         set color white
         set size 4
         set heading initial-heading
+
+        set current-speed 0
+        set accel infantry-acceleration
+        set decel infantry-deceleration
+        ifelse on-dirt? [
+          set speed infantry-max-dirt-speed
+        ] [
+          set speed infantry-max-road-speed
+        ]
       ]
+
       set total-infantry-used (total-infantry-used + n-troops-in-unit)
       set curr-idx-infantry (curr-idx-infantry - 1)
     ]
@@ -324,7 +335,7 @@ to spawn-units-from-entry [entry-point]
         set shape "truck"
         set color black
         set size 4
-        set heading 180
+        set heading initial-heading
 
         set current-speed 0
         set accel truck-acceleration
@@ -336,9 +347,8 @@ to spawn-units-from-entry [entry-point]
         ]
       ]
       set total-pontoons-used (total-pontoons-used + n-pontoons)
-      set curr-spawn-index-trucks (curr-spawn-index-trucks - 1)
+      set curr-idx-trucks (curr-idx-trucks - 1)
     ]
-
 
     set depl-idx (depl-idx + 1)
 
@@ -843,6 +853,17 @@ GRAPHICS-WINDOW
 1
 ticks
 30.0
+
+MONITOR
+0
+0
+0
+0
+NIL
+NIL
+17
+1
+11
 
 BUTTON
 598

@@ -320,7 +320,7 @@ to spawn-units-from-entry [entry-point]
       ]
 
       set total-infantry-used (total-infantry-used + n-troops-in-unit)
-      set curr-spawn-index-infantry (curr-spawn-index-infantry - 1)
+      set curr-idx-infantry (curr-idx-infantry - 1)
     ]
 
 
@@ -347,7 +347,7 @@ to spawn-units-from-entry [entry-point]
         ]
       ]
       set total-pontoons-used (total-pontoons-used + n-pontoons)
-      set curr-spawn-index-trucks (curr-spawn-index-trucks - 1)
+      set curr-idx-trucks (curr-idx-trucks - 1)
     ]
 
     set depl-idx (depl-idx + 1)
@@ -1039,7 +1039,7 @@ CHOOSER
 site-selection-mode
 site-selection-mode
 "01 Shortest Bridges" "02 Shortest Bridges" "03 Shortest Bridges" "04 Shortest Bridges" "05 Shortest Bridges" "06 Shortest Bridges" "07 Shortest Bridges" "08 Shortest Bridges" "09 Shortest Bridges" "10 Shortest Bridges" "11 Shortest Bridges" "12 Shortest Bridges" "13 Shortest Bridges"
-12
+1
 
 MONITOR
 450
