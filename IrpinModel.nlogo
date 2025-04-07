@@ -578,9 +578,9 @@ end
 
 to-report select-sites
   ;; step 1: Define the site groups in the order north, west, south
-  let north-sites reverse [0 1 2 3 4]
-  let west-sites reverse [5 6 7 8]
-  let south-sites reverse [9 10 11 12]
+  let north-sites [0 1 2 3 4]
+  let west-sites [5 6 7 8]
+  let south-sites [9 10 11 12]
 
   ;; step 2: Extract the number of sites to use
   let num-sites-literal substring site-selection-mode 0 2
@@ -608,7 +608,6 @@ to-report select-sites
   ;; step 5: Report the selected site IDs
   report selected-site-ids
 end
-
 
 ;; Prevents spawners from getting backed up when line reaches them
 to update-spawn-availability
@@ -1048,7 +1047,7 @@ CHOOSER
 site-selection-mode
 site-selection-mode
 "01 Shortest Bridges" "02 Shortest Bridges" "03 Shortest Bridges" "04 Shortest Bridges" "05 Shortest Bridges" "06 Shortest Bridges" "07 Shortest Bridges" "08 Shortest Bridges" "09 Shortest Bridges" "10 Shortest Bridges" "11 Shortest Bridges" "12 Shortest Bridges" "13 Shortest Bridges"
-3
+12
 
 MONITOR
 450
