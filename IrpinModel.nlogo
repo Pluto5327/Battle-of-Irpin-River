@@ -228,7 +228,7 @@ to go
   update-spawn-availability
   spawn-units
   build-pontoon-bridges
-  ;drone-detect-and-artillery-fire
+  drone-detect-and-artillery-fire
   if battle-over? [stop]
   tick ;; IMPORTANT: each represents 1min
 end
@@ -378,17 +378,9 @@ to move-units
 
     if breed = trucks [
       set ahead-blocked? any? other trucks in-cone 10 60 with [ distance myself < 15 ]
-<<<<<<< Updated upstream
-      set ahead-blocked? ahead-blocked? or any? infantry in-cone 10 60 with [ distance myself < 15 ]
     ]
     if breed = infantry [
       set ahead-blocked? any? other infantry in-cone 10 60 with [ distance myself < 15 ]
-      set ahead-blocked? ahead-blocked? or any? trucks in-cone 10 60 with [ distance myself < 15 ]
-=======
-    ]
-    if breed = infantry [
-      set ahead-blocked? any? other infantry in-cone 10 60 with [ distance myself < 15 ]
->>>>>>> Stashed changes
     ]
 
     ifelse ahead-blocked? [
@@ -585,36 +577,38 @@ end
 ;; ---------------------------------------------------
 
 to-report select-sites
-  ;; Shortest X Sites Options-------------------------
+  ;; step 1: Define the site groups in the order north, west, south
+  let north-sites reverse [0 1 2 3 4]
+  let west-sites reverse [5 6 7 8]
+  let south-sites reverse [9 10 11 12]
 
-  ;; Extract number of sites to use
+  ;; step 2: Extract the number of sites to use
   let num-sites-literal substring site-selection-mode 0 2
   let num-sites read-from-string num-sites-literal
 
-  ;; Step 1: Get number of sites available
-  let num-total-sites length all-site-ids
-
-  ;; Step 2: Make a list of site-id/pontoon pairs
-  let site-pairs []
-  (foreach (n-values num-total-sites [ i -> i ]) num-required-pontoons-per-site [
-    [site-id pontoon-count] ->
-      set site-pairs lput (list site-id pontoon-count) site-pairs
-  ])
-
-  ;; Step 3: Sort those site-pairs by required pontoons (ascending)
-  let sorted-pairs sort-by [[a b] -> item 1 a < item 1 b] site-pairs
-
-
-  ;; Step 4: Randomly shuffle the sorted pairs
-  set sorted-pairs n-values length sorted-pairs [ one-of remove-duplicates sorted-pairs ]
-
-  ;; Step 5: Choose top `num-sites` site-ids
+  ;; step 3: Initialize the list to store selected sites
   let selected-site-ids []
-  (foreach sublist sorted-pairs 0 num-sites [
-    [pair] -> set selected-site-ids lput (item 0 pair) selected-site-ids
-  ])
+
+  ;; step 4: Add sites in the order north, west, south, selecting from largest to smallest within each group
+  while [length selected-site-ids < num-sites] [
+    if length selected-site-ids < num-sites and not empty? north-sites [
+      set selected-site-ids lput (first north-sites) selected-site-ids
+      set north-sites but-first north-sites
+    ]
+    if length selected-site-ids < num-sites and not empty? west-sites [
+      set selected-site-ids lput (first west-sites) selected-site-ids
+      set west-sites but-first west-sites
+    ]
+    if length selected-site-ids < num-sites and not empty? south-sites [
+      set selected-site-ids lput (first south-sites) selected-site-ids
+      set south-sites but-first south-sites
+    ]
+  ]
+
+  ;; step 5: Report the selected site IDs
   report selected-site-ids
 end
+
 
 ;; Prevents spawners from getting backed up when line reaches them
 to update-spawn-availability
@@ -1054,11 +1048,7 @@ CHOOSER
 site-selection-mode
 site-selection-mode
 "01 Shortest Bridges" "02 Shortest Bridges" "03 Shortest Bridges" "04 Shortest Bridges" "05 Shortest Bridges" "06 Shortest Bridges" "07 Shortest Bridges" "08 Shortest Bridges" "09 Shortest Bridges" "10 Shortest Bridges" "11 Shortest Bridges" "12 Shortest Bridges" "13 Shortest Bridges"
-<<<<<<< Updated upstream
-4
-=======
-11
->>>>>>> Stashed changes
+3
 
 MONITOR
 450
