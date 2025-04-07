@@ -134,7 +134,7 @@ to initialize-params
   set dirt-roads-start-x 235
   set infantry-road-speed 45 ;; # of pixels moved per tick; About 4mph. Source: Map is 7.5mi wide and 460 pixels wide, troops march at about 4mph, ticks are 1min.
   set truck-road-speed 45 ;; Pixels per tick; About 44mph
-  set infantry-dirt-speed  ;; Pixels per tick; About 3mph
+  set infantry-dirt-speed 15 ;; Pixels per tick; About 3mph
   set truck-dirt-speed 15 ;; Pixels per tick; About 15mph
   set truck-pontoon-module-capacity 1
   set total-infantry-crossed 0
@@ -190,7 +190,7 @@ to initialize-params
   set south-entry-x 100
   set south-entry-y 0
 
-    set north-entry-clogged? false
+  set north-entry-clogged? false
   set west-entry-clogged? false
   set south-entry-clogged? false
 
@@ -234,6 +234,7 @@ to go
   if battle-over? [stop]
   tick ;; IMPORTANT: each represents 1min
 end
+
 
 ;; ---------------------------------------------------
 ;; ----------------- MAIN FUNCTIONS ------------------
@@ -311,22 +312,33 @@ to spawn-units-from-entry [entry-point]
       set curr-idx-infantry (curr-idx-infantry - 1)
     ]
 
+
     if next-deployment-unit = "truck" [
       let n-pontoons (truck-pontoon-module-capacity * truck-unit-depth)
-      create-trucks 1 [
+      create-trucks 1 [ ;; = A line/group of trucks
         setxy entry-x entry-y
         set site-num site-id-t
         set site-y item site-id-t site-ys
-        set num-pontoons n-pontoons * 3
+        set num-pontoons n-pontoons * 3 ; take away 3
         set speed truck-dirt-speed
         set shape "truck"
         set color black
         set size 4
-        set heading initial-heading
+        set heading 180
+
+        set current-speed 0
+        set accel truck-acceleration
+        set decel truck-deceleration
+        ifelse on-dirt? [
+          set speed truck-max-dirt-speed
+        ] [
+          set speed truck-max-road-speed
+        ]
       ]
       set total-pontoons-used (total-pontoons-used + n-pontoons)
-      set curr-idx-trucks (curr-idx-trucks - 1)
+      set curr-spawn-index-trucks (curr-spawn-index-trucks - 1)
     ]
+
 
     set depl-idx (depl-idx + 1)
 
