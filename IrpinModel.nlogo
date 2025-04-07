@@ -423,11 +423,15 @@ to move-units
         ;; Cone-based collision detection
         if breed = trucks [
           set blocked? any? other trucks in-cone (1 + step-size) 90 with [ distance myself < 5 ] ; edit (1 + X) to make collision boxes larger
-          set blocked? blocked? or any? infantry in-cone (1 + step-size) 90 with [ distance myself < 5 ]
+
+          ;; The line below makes congestion which we never want
+          ; set blocked? blocked? or any? infantry in-cone (1 + step-size) 90 with [ distance myself < 5 ]
         ]
         if breed = infantry [
           set blocked? any? other infantry in-cone (1 + step-size) 90 with [ distance myself < 5 ]
-          set blocked? any? other trucks in-cone (1 + step-size) 90 with [ distance myself < 5 ]
+
+          ;; The line below makes congestion which we never want
+          ; set blocked? any? other trucks in-cone (1 + step-size) 90 with [ distance myself < 5 ]
 
         ]
         if blocked? = true [
@@ -1039,7 +1043,7 @@ CHOOSER
 site-selection-mode
 site-selection-mode
 "01 Shortest Bridges" "02 Shortest Bridges" "03 Shortest Bridges" "04 Shortest Bridges" "05 Shortest Bridges" "06 Shortest Bridges" "07 Shortest Bridges" "08 Shortest Bridges" "09 Shortest Bridges" "10 Shortest Bridges" "11 Shortest Bridges" "12 Shortest Bridges" "13 Shortest Bridges"
-1
+12
 
 MONITOR
 450
@@ -1060,6 +1064,28 @@ MONITOR
 Average Bridge Completion (Percent)
 mean (map [[a b] -> round (100 * (a / b))] site-pontoon-built-count num-required-pontoons-per-site)
 0
+1
+11
+
+MONITOR
+450
+440
+667
+485
+West Road/Entry Clogged
+west-entry-clogged?
+17
+1
+11
+
+MONITOR
+451
+491
+667
+536
+South Road/Entry Clogged
+south-entry-clogged?
+17
 1
 11
 
