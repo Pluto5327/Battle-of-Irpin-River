@@ -79,8 +79,6 @@ globals [
   deployment-order-idx-north
   deployment-order-idx-west
   deployment-order-idx-south
-
-  ;; iv3-selection
 ]
 patches-own [terrain]
 breed [infantry infantryperson]
@@ -380,11 +378,17 @@ to move-units
 
     if breed = trucks [
       set ahead-blocked? any? other trucks in-cone 10 60 with [ distance myself < 15 ]
+<<<<<<< Updated upstream
       set ahead-blocked? ahead-blocked? or any? infantry in-cone 10 60 with [ distance myself < 15 ]
     ]
     if breed = infantry [
       set ahead-blocked? any? other infantry in-cone 10 60 with [ distance myself < 15 ]
       set ahead-blocked? ahead-blocked? or any? trucks in-cone 10 60 with [ distance myself < 15 ]
+=======
+    ]
+    if breed = infantry [
+      set ahead-blocked? any? other infantry in-cone 10 60 with [ distance myself < 15 ]
+>>>>>>> Stashed changes
     ]
 
     ifelse ahead-blocked? [
@@ -1050,7 +1054,11 @@ CHOOSER
 site-selection-mode
 site-selection-mode
 "01 Shortest Bridges" "02 Shortest Bridges" "03 Shortest Bridges" "04 Shortest Bridges" "05 Shortest Bridges" "06 Shortest Bridges" "07 Shortest Bridges" "08 Shortest Bridges" "09 Shortest Bridges" "10 Shortest Bridges" "11 Shortest Bridges" "12 Shortest Bridges" "13 Shortest Bridges"
+<<<<<<< Updated upstream
 4
+=======
+11
+>>>>>>> Stashed changes
 
 MONITOR
 450
