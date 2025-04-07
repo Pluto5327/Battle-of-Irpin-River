@@ -187,7 +187,7 @@ to initialize-params
   set north-entry-y 624
   set west-entry-x 0
   set west-entry-y 300
-  set south-entry-x 100
+  set south-entry-x 60
   set south-entry-y 0
 
   set north-entry-clogged? false
@@ -481,7 +481,7 @@ to turn-into-site-when-arrived [ unit ]
     ]
   ]
   if entry-type = "west" [
-    if [xcor] of unit > 240 [
+    if [xcor] of unit > 250 [
       ifelse [ycor] of unit < target-y [
         ask unit [ set heading 0 ]
       ] [
@@ -493,8 +493,11 @@ to turn-into-site-when-arrived [ unit ]
     ]
   ]
   if entry-type = "south" [
-    if abs (([ycor] of unit) - target-y) <= tolerance [
+    if [ycor] of unit = 82 [
       ask unit [ set heading 90 ]
+    ]
+    if [xcor] of unit >= 250 [
+      ask unit [ set heading 0 ]
     ]
   ]
 
