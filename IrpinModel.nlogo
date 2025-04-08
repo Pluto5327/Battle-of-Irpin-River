@@ -314,7 +314,7 @@ to spawn-units-from-entry [entry-point]
         set num-troops n-troops-in-unit * infantry-units-per-road * 10; take away extra 3
         set speed infantry-road-speed
         set color white
-        set size 4
+        set size 6
         set heading initial-heading
 
         set current-speed 0
@@ -342,7 +342,7 @@ to spawn-units-from-entry [entry-point]
         set speed truck-dirt-speed
         set shape "truck"
         set color black
-        set size 4
+        set size 6
         set heading initial-heading
 
         set current-speed 0
@@ -923,10 +923,10 @@ NIL
 1
 
 MONITOR
-3
-190
-452
-235
+0
+214
+449
+259
 Infantry Ready to Build at each Site
 site-builder-count
 17
@@ -934,10 +934,10 @@ site-builder-count
 11
 
 MONITOR
-3
-239
-451
-284
+0
+263
+448
+308
 Pontoons Modules Ready to be Built at each Site
 site-pontoon-count
 0
@@ -945,10 +945,10 @@ site-pontoon-count
 11
 
 MONITOR
-3
-289
-450
-334
+0
+313
+447
+358
 Number of Pontoon Modules Built at each Site
 site-pontoon-built-count
 0
@@ -956,10 +956,10 @@ site-pontoon-built-count
 11
 
 MONITOR
-6
-391
-445
-436
+3
+415
+442
+460
 Whether Each Site has completed Building its Bridge
 site-pontoon-bridge-built
 17
@@ -967,10 +967,10 @@ site-pontoon-bridge-built
 11
 
 MONITOR
-6
-491
-446
-536
+3
+515
+443
+560
 Total Number of Pontoon Modules Built
 total-pontoons-built
 0
@@ -978,10 +978,10 @@ total-pontoons-built
 11
 
 MONITOR
-454
-190
-667
-235
+452
+166
+665
+211
 Number of Troops Crossed
 total-infantry-crossed
 17
@@ -989,10 +989,10 @@ total-infantry-crossed
 11
 
 MONITOR
-6
-441
-445
-486
+3
+465
+442
+510
 Time Of Last Building Activity at Each Site
 time-of-last-site-activity
 17
@@ -1033,21 +1033,21 @@ total-pontoons-used
 11
 
 MONITOR
-453
-289
-667
-334
+451
+265
+665
+310
 Number of Infantry Killed
-total-infantry-casualties
+total-infantry-casualties / 10
 17
 1
 11
 
 MONITOR
-453
-240
-667
-285
+451
+216
+665
+261
 Infantry Casualty Ratio
 total-infantry-casualties / (total-infantry-used * 10)
 4
@@ -1055,10 +1055,10 @@ total-infantry-casualties / (total-infantry-used * 10)
 11
 
 MONITOR
-3
-339
-446
-384
+0
+363
+443
+408
 Percent Completion of Pontoon Bridge at Each Site
 map [[a b] -> round (100 * (a / b))] site-pontoon-built-count num-required-pontoons-per-site
 0
@@ -1073,13 +1073,13 @@ CHOOSER
 site-selection-mode
 site-selection-mode
 "01 Shortest Bridges" "02 Shortest Bridges" "03 Shortest Bridges" "04 Shortest Bridges" "05 Shortest Bridges" "06 Shortest Bridges" "07 Shortest Bridges" "08 Shortest Bridges" "09 Shortest Bridges" "10 Shortest Bridges" "11 Shortest Bridges" "12 Shortest Bridges" "13 Shortest Bridges"
-11
+12
 
 MONITOR
-450
-390
-668
-435
+448
+366
+666
+411
 North Road/Entry Clogged
 north-entry-clogged?
 17
@@ -1087,10 +1087,10 @@ north-entry-clogged?
 11
 
 MONITOR
-452
-338
-667
-383
+450
+314
+665
+359
 Average Bridge Completion (Percent)
 mean (map [[a b] -> round (100 * (a / b))] site-pontoon-built-count num-required-pontoons-per-site)
 0
@@ -1098,10 +1098,10 @@ mean (map [[a b] -> round (100 * (a / b))] site-pontoon-built-count num-required
 11
 
 MONITOR
-450
-440
-667
-485
+448
+416
+665
+461
 West Road/Entry Clogged
 west-entry-clogged?
 17
@@ -1109,10 +1109,10 @@ west-entry-clogged?
 11
 
 MONITOR
-451
-491
-667
-536
+449
+467
+665
+512
 South Road/Entry Clogged
 south-entry-clogged?
 17
@@ -1120,10 +1120,10 @@ south-entry-clogged?
 11
 
 SWITCH
-5
-149
-192
-182
+32
+172
+219
+205
 turn-on-artillery?
 turn-on-artillery?
 0
@@ -1131,10 +1131,10 @@ turn-on-artillery?
 -1000
 
 SWITCH
-197
-149
-416
-182
+224
+172
+443
+205
 turn-on-stop-conditions?
 turn-on-stop-conditions?
 0
@@ -1142,10 +1142,10 @@ turn-on-stop-conditions?
 -1000
 
 MONITOR
-452
-541
-667
-586
+450
+517
+665
+562
 Max Bridge Completion (Percent)
 max (map [[a b] -> round (100 * (a / b))] site-pontoon-built-count num-required-pontoons-per-site)
 17
