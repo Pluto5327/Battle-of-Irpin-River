@@ -2,6 +2,8 @@ globals [
   water-color
   pontoon-color
   goal-color
+  grass-color
+  artillery-fire-color
   site-ys
   all-site-ids
   chosen-site-ids
@@ -19,12 +21,14 @@ globals [
   truck-unit-depth
   infantry-road-speed
   truck-road-speed
+  artillery-fire-animation-x
   dirt-roads-start-x
   infantry-dirt-speed
   truck-dirt-speed
   truck-pontoon-module-capacity
   num-required-builders-per-site
   num-required-pontoons-per-site
+  artillery-just-fired
   pontoon-module-setup-time
   artillery-alpha
   artillery-beta
@@ -108,6 +112,8 @@ to setup
   set water-color approximate-rgb 4 36 194
   set pontoon-color brown
   set goal-color approximate-rgb 252 252 60
+  set artillery-fire-color red
+  set grass-color 66.8
 
   set-patch-size 1
   resize-world 0 459 0 624
@@ -126,6 +132,7 @@ to initialize-params
   set site-pontoon-count [0 0 0 0 0 0 0 0 0 0 0 0 0]
   set site-pontoon-built-count [0 0 0 0 0 0 0 0 0 0 0 0 0]
   set site-pontoon-bridge-built [false false false false false false false false false false false false false]
+  set artillery-just-fired [false false false false false false false false false false false false false]
   set num-required-pontoons-per-site [183 131 131 104 160 165 179 208 240 226 302 107 104] ;; # Modules required to build respective bridges
   set chosen-site-ids select-sites
   set time-of-last-site-activity [-1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1] ;; Default state, no activity yet at any site
@@ -136,6 +143,7 @@ to initialize-params
   set infantry-dirt-speed 15 ;; Pixels per tick; About 3mph
   set truck-dirt-speed 15 ;; Pixels per tick; About 15mph
   set truck-pontoon-module-capacity 1
+  set artillery-fire-animation-x 415
   set total-infantry-crossed 0
   set total-pontoons-built 0
   set total-infantry-casualties 0
@@ -156,9 +164,9 @@ to initialize-params
   set activity-cooldown-time 30 ;; 30min after last activity has been seen, the t in the artillery equation will be reset. THIS IS A SEMI ARBITRARY VALUE
   set artillery-alpha 0.06 ; 0.035 value used before
   set artillery-beta 0.05
-  set time-between-drone-checks 20 ;; 10min
+  set time-between-drone-checks 20 ;; 20min
   set win-num-crossers-threshold 4500 ;; 4500 troops (NOTE: EACH INFANTRY AGENT HAS NUM-TROOPS)
-  set loss-battle-duration-threshold 750 ;28 * 24 * 60 ;; 28days (in minutes) = 28days * 24hrs * 60min
+  set loss-battle-duration-threshold 750 ; Normally 28 days, but we cap at 750min for now 28 * 24 * 60 ;; 28days (in minutes) = 28days * 24hrs * 60min
 
   ;; Dependent Variables
   set total-infantry-used 0
@@ -504,14 +512,6 @@ to turn-into-site-when-arrived [ unit ]
   ]
 end
 
-to-report dx-from-heading [hdg]
-  report cos hdg
-end
-
-to-report dy-from-heading [hdg]
-  report sin hdg
-end
-
 to build-pontoon-bridges
   foreach chosen-site-ids [site-id ->
     let builders-ready site-full-of-builders? site-id
@@ -551,14 +551,14 @@ to drone-detect-and-artillery-fire
         let pDestroyed max(list 0 (1 - artillery-alpha * num-active-sites)) * (1 - exp(-1 * artillery-beta * (duration - 45)))
 
         if (ticks mod time-between-drone-checks = 0) and (random-float 1.0 < pDestroyed) [
-          ;print(word duration "dur, num" num-active-sites)
           destroy-site site-id
-          print (word "💥 Bridge/troops at site " site-id " destroyed at tick " ticks ". Activity with Duration " duration " had artillery hit probability of " pDestroyed " with num sites " num-active-sites )
-          ;print (word "-----------------------------------------------------------------------")
+          ;print (word "💥 Bridge/troops at site " site-id " destroyed at tick " ticks ". Activity with Duration " duration " had artillery hit probability of " pDestroyed " with num sites " num-active-sites )
         ]
       ]
     ]
   ]
+
+  undraw-artillery-fire
 end
 
 to-report battle-over?
@@ -791,6 +791,10 @@ to destroy-site [site-id]
     set site-pontoon-bridge-built replace-item site-id site-pontoon-bridge-built false
   ]
 
+  ;; Animate firing
+  draw-artillery-fire site-id artillery-fire-color
+  set artillery-just-fired replace-item site-id artillery-just-fired true
+
   ;; Get bridge zone
   let y item site-id site-ys
   let x-start item site-id site-bridge-drawing-start-x
@@ -808,7 +812,6 @@ to destroy-site [site-id]
 end
 
 to update-max-speed
-
   ifelse on-dirt? [
 
     if breed = infantry [
@@ -828,9 +831,35 @@ to update-max-speed
   ]
 end
 
-;; BUG: decimal pontoon setup times dont always work
-;; TODO1: Add dropdown menu for IV3 - spacing/waves
-;; TODO2: maybe animate blinking red shape at site when destroyed
+to-report dx-from-heading [hdg]
+  report cos hdg
+end
+
+to-report dy-from-heading [hdg]
+  report sin hdg
+end
+
+to draw-artillery-fire [site-id animation-color]
+  let artillery-fire-animation-y item site-id site-ys
+  ask patches with [
+    pxcor >= artillery-fire-animation-x - 2 and pxcor <= artillery-fire-animation-x + 2 and
+    pycor >= (artillery-fire-animation-y - 2) and pycor <= (artillery-fire-animation-y + 2)
+  ] [
+    set pcolor animation-color
+  ]
+end
+
+to undraw-artillery-fire
+  if (ticks mod 9) = 0 [ ; Every 9min the artillery fire undraws itself if it was drawn before
+    foreach all-site-ids [ site-id ->
+      let artillery-fired-recently? item site-id artillery-just-fired
+      if artillery-fired-recently? [
+        draw-artillery-fire site-id grass-color
+        set artillery-just-fired replace-item site-id artillery-just-fired false
+      ]
+    ]
+  ]
+end
 @#$#@#$#@
 GRAPHICS-WINDOW
 671
@@ -1044,7 +1073,7 @@ CHOOSER
 site-selection-mode
 site-selection-mode
 "01 Shortest Bridges" "02 Shortest Bridges" "03 Shortest Bridges" "04 Shortest Bridges" "05 Shortest Bridges" "06 Shortest Bridges" "07 Shortest Bridges" "08 Shortest Bridges" "09 Shortest Bridges" "10 Shortest Bridges" "11 Shortest Bridges" "12 Shortest Bridges" "13 Shortest Bridges"
-12
+11
 
 MONITOR
 450
@@ -1470,7 +1499,7 @@ NetLogo 6.4.0
 @#$#@#$#@
 @#$#@#$#@
 <experiments>
-  <experiment name="Varying Site-Selection With No Artillery Active" repetitions="1" runMetricsEveryStep="false">
+  <experiment name="Varying Site-Selection With No Artillery Active" repetitions="1" sequentialRunOrder="false" runMetricsEveryStep="false">
     <setup>setup</setup>
     <go>go</go>
     <metric>ticks</metric>
