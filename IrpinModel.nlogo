@@ -166,7 +166,7 @@ to initialize-params
   set artillery-beta 0.05
   set time-between-drone-checks 20 ;; 20min
   set win-num-crossers-threshold 4500 ;; 4500 troops (NOTE: EACH INFANTRY AGENT HAS NUM-TROOPS)
-  set loss-battle-duration-threshold 750 ; Normally 28 days, but we cap at 750min for now 28 * 24 * 60 ;; 28days (in minutes) = 28days * 24hrs * 60min
+  set loss-battle-duration-threshold 28 * 24 * 60 ; Normally 28 days, but we can also cap at 750min for now; 28days (in minutes) = 28days * 24hrs * 60min
 
   ;; Dependent Variables
   set total-infantry-used 0
@@ -311,8 +311,9 @@ to spawn-units-from-entry [entry-point]
         setxy entry-x entry-y
         set site-num site-id-i
         set site-y item site-id-i site-ys
-        set num-troops n-troops-in-unit * infantry-units-per-road * 10; take away extra 3
+        set num-troops n-troops-in-unit * infantry-units-per-road * 10
         set speed infantry-road-speed
+        set shape "truck"
         set color white
         set size 6
         set heading initial-heading
@@ -332,13 +333,13 @@ to spawn-units-from-entry [entry-point]
     ]
 
     if next-deployment-unit = "truck" [
-      let n-pontoons (truck-pontoon-module-capacity * truck-unit-depth)
+      let n-pontoons (truck-pontoon-module-capacity * truck-unit-depth) * 10
 
       create-trucks 1 [ ;; = A line/group of trucks
         setxy entry-x entry-y
         set site-num site-id-t
         set site-y item site-id-t site-ys
-        set num-pontoons n-pontoons * 10; take away 3
+        set num-pontoons n-pontoons
         set speed truck-dirt-speed
         set shape "truck"
         set color black
@@ -562,7 +563,7 @@ to drone-detect-and-artillery-fire
 end
 
 to-report battle-over?
-  if ticks >= loss-battle-duration-threshold [
+  if ticks >= loss-battle-duration-threshold or ((total-infantry-casualties / 10) > 4500) [
     set battle-outcome "Retreat"
     report true
   ]
@@ -862,10 +863,10 @@ to undraw-artillery-fire
 end
 @#$#@#$#@
 GRAPHICS-WINDOW
-671
-12
-1139
-646
+584
+10
+1052
+644
 -1
 -1
 1.0
@@ -889,10 +890,10 @@ ticks
 30.0
 
 BUTTON
-598
-14
-665
-48
+511
+12
+578
+46
 NIL
 setup
 NIL
@@ -906,10 +907,10 @@ NIL
 1
 
 BUTTON
-599
-52
-665
-88
+512
+50
+578
+86
 NIL
 go
 T
@@ -924,9 +925,9 @@ NIL
 
 MONITOR
 0
-214
-449
-259
+183
+405
+228
 Infantry Ready to Build at each Site
 site-builder-count
 17
@@ -935,9 +936,9 @@ site-builder-count
 
 MONITOR
 0
-263
-448
-308
+228
+404
+273
 Pontoons Modules Ready to be Built at each Site
 site-pontoon-count
 0
@@ -946,9 +947,9 @@ site-pontoon-count
 
 MONITOR
 0
-313
-447
-358
+274
+405
+319
 Number of Pontoon Modules Built at each Site
 site-pontoon-built-count
 0
@@ -956,10 +957,10 @@ site-pontoon-built-count
 11
 
 MONITOR
-3
-415
-442
-460
+0
+364
+401
+409
 Whether Each Site has completed Building its Bridge
 site-pontoon-bridge-built
 17
@@ -967,32 +968,32 @@ site-pontoon-bridge-built
 11
 
 MONITOR
-3
-515
-443
-560
-Total Number of Pontoon Modules Built
+403
+273
+579
+318
+Pontoon Modules Built
 total-pontoons-built
 0
 1
 11
 
 MONITOR
-452
-166
-665
-211
-Number of Troops Crossed
+445
+137
+579
+182
+Infantry Crossed
 total-infantry-crossed
 17
 1
 11
 
 MONITOR
-3
-465
-442
-510
+0
+410
+400
+455
 Time Of Last Building Activity at Each Site
 time-of-last-site-activity
 17
@@ -1000,10 +1001,10 @@ time-of-last-site-activity
 11
 
 MONITOR
-54
-93
-208
-138
+176
+91
+299
+136
 Battle Status
 battle-outcome
 17
@@ -1011,43 +1012,32 @@ battle-outcome
 11
 
 MONITOR
-213
-93
-405
-138
-Number of Infantry Used/Sent
+300
+91
+443
+136
+Infantry Sent
 total-infantry-used
 17
 1
 11
 
 MONITOR
-407
-93
-666
-138
-Number of Pontoon Modules Used/Sent
+445
+91
+580
+136
+Pontoon Modules Sent
 total-pontoons-used
 17
 1
 11
 
 MONITOR
-451
-265
-665
-310
-Number of Infantry Killed
-total-infantry-casualties / 10
-17
-1
-11
-
-MONITOR
-451
-216
-665
-261
+300
+137
+442
+182
 Infantry Casualty Ratio
 total-infantry-casualties / (total-infantry-used * 10)
 4
@@ -1056,9 +1046,9 @@ total-infantry-casualties / (total-infantry-used * 10)
 
 MONITOR
 0
-363
-443
-408
+319
+404
+364
 Percent Completion of Pontoon Bridge at Each Site
 map [[a b] -> round (100 * (a / b))] site-pontoon-built-count num-required-pontoons-per-site
 0
@@ -1066,20 +1056,20 @@ map [[a b] -> round (100 * (a / b))] site-pontoon-built-count num-required-ponto
 11
 
 CHOOSER
-387
-27
-591
-72
+300
+25
+504
+70
 site-selection-mode
 site-selection-mode
 "01 Shortest Bridges" "02 Shortest Bridges" "03 Shortest Bridges" "04 Shortest Bridges" "05 Shortest Bridges" "06 Shortest Bridges" "07 Shortest Bridges" "08 Shortest Bridges" "09 Shortest Bridges" "10 Shortest Bridges" "11 Shortest Bridges" "12 Shortest Bridges" "13 Shortest Bridges"
-12
+0
 
 MONITOR
-448
-366
-666
-411
+402
+320
+581
+365
 North Road/Entry Clogged
 north-entry-clogged?
 17
@@ -1087,21 +1077,21 @@ north-entry-clogged?
 11
 
 MONITOR
-450
-314
-665
-359
-Average Bridge Completion (Percent)
+403
+181
+580
+226
+Average Bridge Completion (%)
 mean (map [[a b] -> round (100 * (a / b))] site-pontoon-built-count num-required-pontoons-per-site)
 0
 1
 11
 
 MONITOR
-448
-416
-665
-461
+402
+365
+582
+410
 West Road/Entry Clogged
 west-entry-clogged?
 17
@@ -1109,10 +1099,10 @@ west-entry-clogged?
 11
 
 MONITOR
-449
-467
-665
-512
+402
+411
+582
+456
 South Road/Entry Clogged
 south-entry-clogged?
 17
@@ -1120,21 +1110,21 @@ south-entry-clogged?
 11
 
 SWITCH
-32
-172
-219
-205
-turn-on-artillery?
-turn-on-artillery?
 0
+94
+175
+127
+turn-on-artillery?
+turn-on-artillery?
+1
 1
 -1000
 
 SWITCH
-224
-172
-443
-205
+0
+149
+183
+182
 turn-on-stop-conditions?
 turn-on-stop-conditions?
 0
@@ -1142,12 +1132,77 @@ turn-on-stop-conditions?
 -1000
 
 MONITOR
-450
-517
-665
-562
-Max Bridge Completion (Percent)
+403
+227
+580
+272
+Max Bridge Completion (%)
 max (map [[a b] -> round (100 * (a / b))] site-pontoon-built-count num-required-pontoons-per-site)
+17
+1
+11
+
+PLOT
+0
+457
+219
+649
+Max Bridge Completion (%)
+Time (minutes)
+Max Completion (%)
+0.0
+10.0
+0.0
+100.0
+true
+false
+"" ""
+PENS
+"default" 1.0 0 -13791810 true "" "plot max (map [[a b] -> round (100 * (a / b))] site-pontoon-built-count num-required-pontoons-per-site)"
+
+PLOT
+220
+457
+441
+649
+Average Bridge Completion (%)
+Time (min)
+Avg Completion (%)
+0.0
+10.0
+0.0
+100.0
+true
+false
+"" ""
+PENS
+"default" 1.0 0 -11085214 true "" "plot (mean (map [[a b] -> round (100 * (a / b))] site-pontoon-built-count num-required-pontoons-per-site))"
+
+PLOT
+0
+650
+219
+840
+Casualty Ratio (%)
+Time (min)
+Ratio (%)
+0.0
+10.0
+0.0
+1.0
+true
+false
+"" ""
+PENS
+"default" 1.0 0 -2674135 true "" "plot (total-infantry-casualties / (total-infantry-used * 10 + 0.0001))"
+
+MONITOR
+176
+137
+298
+182
+Infantry Casualties
+total-infantry-casualties / 10
 17
 1
 11
