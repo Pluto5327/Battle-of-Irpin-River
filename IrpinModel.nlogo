@@ -166,7 +166,7 @@ to initialize-params
   set artillery-beta 0.05
   set time-between-drone-checks 20 ;; 20min
   set win-num-crossers-threshold 4500 ;; 4500 troops (NOTE: EACH INFANTRY AGENT HAS NUM-TROOPS)
-  set loss-battle-duration-threshold 28 * 24 * 60 ; Normally 28 days, but we can also cap at 750min for now; 28days (in minutes) = 28days * 24hrs * 60min
+  set loss-battle-duration-threshold 28 * 24 * 60 ; Normally 28 days, but we can also cap at 750min for now; 28 * 24 * 60  28days (in minutes) = 28days * 24hrs * 60min
 
   ;; Dependent Variables
   set total-infantry-used 0
@@ -1063,7 +1063,7 @@ CHOOSER
 site-selection-mode
 site-selection-mode
 "01 Shortest Bridges" "02 Shortest Bridges" "03 Shortest Bridges" "04 Shortest Bridges" "05 Shortest Bridges" "06 Shortest Bridges" "07 Shortest Bridges" "08 Shortest Bridges" "09 Shortest Bridges" "10 Shortest Bridges" "11 Shortest Bridges" "12 Shortest Bridges" "13 Shortest Bridges"
-0
+12
 
 MONITOR
 402
@@ -1116,7 +1116,7 @@ SWITCH
 127
 turn-on-artillery?
 turn-on-artillery?
-1
+0
 1
 -1000
 
@@ -1561,9 +1561,38 @@ NetLogo 6.4.0
     <metric>total-infantry-used</metric>
     <metric>total-pontoons-used</metric>
     <metric>battle-outcome</metric>
-    <runMetricsCondition>battle-outcome = "Victory" or battle-outcome = "Retreat" or ticks &gt; 749</runMetricsCondition>
     <enumeratedValueSet variable="turn-on-artillery?">
       <value value="false"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="turn-on-stop-conditions?">
+      <value value="true"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="site-selection-mode">
+      <value value="&quot;01 Shortest Bridges&quot;"/>
+      <value value="&quot;02 Shortest Bridges&quot;"/>
+      <value value="&quot;03 Shortest Bridges&quot;"/>
+      <value value="&quot;04 Shortest Bridges&quot;"/>
+      <value value="&quot;05 Shortest Bridges&quot;"/>
+      <value value="&quot;06 Shortest Bridges&quot;"/>
+      <value value="&quot;07 Shortest Bridges&quot;"/>
+      <value value="&quot;08 Shortest Bridges&quot;"/>
+      <value value="&quot;09 Shortest Bridges&quot;"/>
+      <value value="&quot;10 Shortest Bridges&quot;"/>
+      <value value="&quot;11 Shortest Bridges&quot;"/>
+      <value value="&quot;12 Shortest Bridges&quot;"/>
+      <value value="&quot;13 Shortest Bridges&quot;"/>
+    </enumeratedValueSet>
+  </experiment>
+  <experiment name="Vary Site-Selection Artillery Active" repetitions="1" runMetricsEveryStep="false">
+    <setup>setup</setup>
+    <go>go</go>
+    <metric>battle-outcome</metric>
+    <metric>total-infantry-crossed</metric>
+    <metric>total-infantry-casualties / 10</metric>
+    <metric>total-infantry-used</metric>
+    <metric>ticks</metric>
+    <enumeratedValueSet variable="turn-on-artillery?">
+      <value value="true"/>
     </enumeratedValueSet>
     <enumeratedValueSet variable="turn-on-stop-conditions?">
       <value value="true"/>
