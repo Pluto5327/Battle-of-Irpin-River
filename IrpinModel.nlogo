@@ -43,8 +43,8 @@ globals [
   total-infantry-casualties
   curr-spawn-index-infantry
   curr-spawn-index-trucks
-  infantry-clogged?
-  trucks-clogged?
+  infantry-clogged
+  trucks-clogged
   deployment-order
   deployment-order-idx
   deployment-order-len
@@ -149,8 +149,6 @@ to initialize-params
   set total-infantry-casualties 0
   set curr-spawn-index-infantry length chosen-site-ids - 1
   set curr-spawn-index-trucks length chosen-site-ids - 1
-  set infantry-clogged? false
-  set trucks-clogged? false
   set north-entry-clogged? false
   set deployment-order ["infantry" "truck"]
   set deployment-order-idx 0
@@ -201,6 +199,8 @@ to initialize-params
   set north-entry-clogged? false
   set west-entry-clogged? false
   set south-entry-clogged? false
+  set infantry-clogged [false false false] ; North, West, South
+  set trucks-clogged [false false false]; North, West, South
 
   set north-entry-sites [0 1 2 3 4]
   set west-entry-sites [5 6 7 8]
@@ -251,9 +251,11 @@ end
 
 
 to spawn-units
-  spawn-units-from-entry "north"
-  spawn-units-from-entry "west"
-  spawn-units-from-entry "south"
+  if spacing-mode = "Uniform" or ( spacing-mode = "Waves" and (ticks mod (wave-duration + wave-pause)) < wave-duration) [ ; Optimal Wave Duration/Pause looking like 200, 60
+    spawn-units-from-entry "north"
+    spawn-units-from-entry "west"
+    spawn-units-from-entry "south"
+  ]
 end
 
 to spawn-units-from-entry [entry-point]
@@ -297,13 +299,15 @@ to spawn-units-from-entry [entry-point]
     set initial-heading 0
   ]
 
-  if not entry-clogged? and not empty? entry-sites [
+  let infantry-clogged-here item (position entry-point ["north" "west" "south"]) infantry-clogged
+  let trucks-clogged-here item (position entry-point ["north" "west" "south"]) trucks-clogged
+  if not (infantry-clogged-here and trucks-clogged-here) and not empty? entry-sites [
     let site-id-i item (curr-idx-infantry mod length entry-sites) entry-sites
     let site-id-t item (curr-idx-trucks mod length entry-sites) entry-sites
     let curr-deployment-idx (depl-idx mod deployment-order-len)
     let next-deployment-unit item curr-deployment-idx deployment-order
 
-    if next-deployment-unit = "infantry" [
+    if next-deployment-unit = "infantry" and not infantry-clogged-here [
       let infantry-units-per-road item site-id-i site-infantry-units-per-road
       let n-troops-in-unit infantry-unit-depth
 
@@ -332,7 +336,7 @@ to spawn-units-from-entry [entry-point]
       set curr-idx-infantry (curr-idx-infantry - 1)
     ]
 
-    if next-deployment-unit = "truck" [
+    if next-deployment-unit = "truck" and not trucks-clogged-here [
       let n-pontoons (truck-pontoon-module-capacity * truck-unit-depth) * 10
 
       create-trucks 1 [ ;; = A line/group of trucks
@@ -429,13 +433,13 @@ to move-units
         let blocked? false
         ;; Cone-based collision detection
         if breed = trucks [
-          set blocked? any? other trucks in-cone (1 + step-size) 90 with [ distance myself < 5 ] ; edit (1 + X) to make collision boxes larger
+          set blocked? any? other trucks in-cone (1 + step-size) 90 with [ distance myself < 5]
 
           ;; The line below makes congestion which we never want
           ; set blocked? blocked? or any? infantry in-cone (1 + step-size) 90 with [ distance myself < 5 ]
         ]
         if breed = infantry [
-          set blocked? any? other infantry in-cone (1 + step-size) 90 with [ distance myself < 5 ]
+          set blocked? any? other infantry in-cone (1 + step-size) 90 with [ distance myself < 5]
 
           ;; The line below makes congestion which we never want
           ; set blocked? any? other trucks in-cone (1 + step-size) 90 with [ distance myself < 5 ]
@@ -613,27 +617,15 @@ end
 
 ;; Prevents spawners from getting backed up when line reaches them
 to update-spawn-availability
+  let infantry-here-north any? infantry with [abs (xcor - north-entry-x) < 1 and abs (ycor - north-entry-y) < 1]
+  let trucks-here-north any? trucks with [abs (xcor - north-entry-x) < 1 and abs (ycor - north-entry-y) < 1]
+  let infantry-here-west any? infantry with [abs (xcor - west-entry-x) < 1 and abs (ycor - west-entry-y) < 1]
+  let trucks-here-west any? trucks with [abs (xcor - west-entry-x) < 1 and abs (ycor - west-entry-y) < 1]
+  let infantry-here-south any? infantry with [abs (xcor - south-entry-x) < 1 and abs (ycor - south-entry-y) < 1]
+  let trucks-here-south any? trucks with [abs (xcor - south-entry-x) < 1 and abs (ycor - south-entry-y) < 1]
 
-  let units-here-north turtles with [abs (xcor - north-entry-x) < 1 and abs (ycor - north-entry-y) < 1]
-  ifelse any? units-here-north [
-    set north-entry-clogged? true
-  ] [
-    set north-entry-clogged? false
-  ]
-
-  let units-here-west turtles with [abs (xcor - west-entry-x) < 1 and abs (ycor - west-entry-y) < 1]
-  ifelse any? units-here-west [
-    set west-entry-clogged? true
-  ] [
-    set west-entry-clogged? false
-  ]
-
-  let units-here-south turtles with [abs (xcor - south-entry-x) < 1 and abs (ycor - south-entry-y) < 1]
-  ifelse any? units-here-south [
-    set south-entry-clogged? true
-  ] [
-    set south-entry-clogged? false
-  ]
+  set infantry-clogged (list infantry-here-north infantry-here-west infantry-here-south)
+  set trucks-clogged (list trucks-here-north trucks-here-west trucks-here-south)
 end
 
 ;; Checks if there's a specific terrain type ahead (in front patch at distance 1).
@@ -764,7 +756,8 @@ end
 
 to-report is-site-currently-active? [site-id]
   let num-active-soldiers item site-id site-builder-count
-  report num-active-soldiers > 0
+  let num-built-pontoons item site-id site-pontoon-built-count
+  report num-built-pontoons > 0
 end
 
 to-report was-site-attacked-recently? [site-id]
@@ -863,9 +856,9 @@ to undraw-artillery-fire
 end
 @#$#@#$#@
 GRAPHICS-WINDOW
-584
+568
 10
-1052
+1036
 644
 -1
 -1
@@ -890,10 +883,10 @@ ticks
 30.0
 
 BUTTON
-511
-12
-578
-46
+502
+10
+569
+44
 NIL
 setup
 NIL
@@ -907,10 +900,10 @@ NIL
 1
 
 BUTTON
-512
-50
-578
-86
+503
+44
+569
+80
 NIL
 go
 T
@@ -924,10 +917,10 @@ NIL
 1
 
 MONITOR
-0
-183
-405
-228
+1
+196
+406
+241
 Infantry Ready to Build at each Site
 site-builder-count
 17
@@ -935,10 +928,10 @@ site-builder-count
 11
 
 MONITOR
-0
-228
-404
-273
+1
+241
+405
+286
 Pontoons Modules Ready to be Built at each Site
 site-pontoon-count
 0
@@ -946,10 +939,10 @@ site-pontoon-count
 11
 
 MONITOR
-0
-274
-405
-319
+1
+287
+406
+332
 Number of Pontoon Modules Built at each Site
 site-pontoon-built-count
 0
@@ -957,10 +950,10 @@ site-pontoon-built-count
 11
 
 MONITOR
-0
-364
-401
-409
+1
+377
+402
+422
 Whether Each Site has completed Building its Bridge
 site-pontoon-bridge-built
 17
@@ -968,10 +961,10 @@ site-pontoon-bridge-built
 11
 
 MONITOR
-403
-273
-579
-318
+404
+286
+569
+331
 Pontoon Modules Built
 total-pontoons-built
 0
@@ -979,10 +972,10 @@ total-pontoons-built
 11
 
 MONITOR
-445
-137
-579
-182
+435
+149
+569
+194
 Infantry Crossed
 total-infantry-crossed
 17
@@ -990,10 +983,10 @@ total-infantry-crossed
 11
 
 MONITOR
-0
-410
-400
-455
+1
+423
+401
+468
 Time Of Last Building Activity at Each Site
 time-of-last-site-activity
 17
@@ -1001,10 +994,10 @@ time-of-last-site-activity
 11
 
 MONITOR
-176
-91
-299
-136
+166
+103
+289
+148
 Battle Status
 battle-outcome
 17
@@ -1012,10 +1005,10 @@ battle-outcome
 11
 
 MONITOR
-300
-91
-443
-136
+290
+103
+433
+148
 Infantry Sent
 total-infantry-used
 17
@@ -1023,10 +1016,10 @@ total-infantry-used
 11
 
 MONITOR
-445
-91
-580
-136
+435
+103
+570
+148
 Pontoon Modules Sent
 total-pontoons-used
 17
@@ -1034,10 +1027,10 @@ total-pontoons-used
 11
 
 MONITOR
-300
-137
-442
-182
+290
+149
+432
+194
 Infantry Casualty Ratio
 total-infantry-casualties / (total-infantry-used * 10)
 4
@@ -1045,10 +1038,10 @@ total-infantry-casualties / (total-infantry-used * 10)
 11
 
 MONITOR
-0
-319
-404
-364
+1
+332
+405
+377
 Percent Completion of Pontoon Bridge at Each Site
 map [[a b] -> round (100 * (a / b))] site-pontoon-built-count num-required-pontoons-per-site
 0
@@ -1056,64 +1049,31 @@ map [[a b] -> round (100 * (a / b))] site-pontoon-built-count num-required-ponto
 11
 
 CHOOSER
-300
-25
-504
-70
+364
+10
+502
+55
 site-selection-mode
 site-selection-mode
 "01 Shortest Bridges" "02 Shortest Bridges" "03 Shortest Bridges" "04 Shortest Bridges" "05 Shortest Bridges" "06 Shortest Bridges" "07 Shortest Bridges" "08 Shortest Bridges" "09 Shortest Bridges" "10 Shortest Bridges" "11 Shortest Bridges" "12 Shortest Bridges" "13 Shortest Bridges"
 12
 
 MONITOR
-402
-320
-581
-365
-North Road/Entry Clogged
-north-entry-clogged?
-17
-1
-11
-
-MONITOR
-403
-181
-580
-226
-Average Bridge Completion (%)
-mean (map [[a b] -> round (100 * (a / b))] site-pontoon-built-count num-required-pontoons-per-site)
+404
+194
+569
+239
+Avg Bridge Completion (%)
+sum ((map [[a b] -> round (100 * (a / b))] site-pontoon-built-count num-required-pontoons-per-site)) / length chosen-site-ids
 0
-1
-11
-
-MONITOR
-402
-365
-582
-410
-West Road/Entry Clogged
-west-entry-clogged?
-17
-1
-11
-
-MONITOR
-402
-411
-582
-456
-South Road/Entry Clogged
-south-entry-clogged?
-17
 1
 11
 
 SWITCH
 0
-94
-175
-127
+10
+187
+43
 turn-on-artillery?
 turn-on-artillery?
 0
@@ -1122,9 +1082,9 @@ turn-on-artillery?
 
 SWITCH
 0
-149
-183
-182
+43
+188
+76
 turn-on-stop-conditions?
 turn-on-stop-conditions?
 0
@@ -1132,10 +1092,10 @@ turn-on-stop-conditions?
 -1000
 
 MONITOR
-403
-227
-580
-272
+404
+240
+569
+285
 Max Bridge Completion (%)
 max (map [[a b] -> round (100 * (a / b))] site-pontoon-built-count num-required-pontoons-per-site)
 17
@@ -1143,10 +1103,10 @@ max (map [[a b] -> round (100 * (a / b))] site-pontoon-built-count num-required-
 11
 
 PLOT
-0
-457
-219
-649
+1
+470
+220
+662
 Max Bridge Completion (%)
 Time (minutes)
 Max Completion (%)
@@ -1161,10 +1121,10 @@ PENS
 "default" 1.0 0 -13791810 true "" "plot max (map [[a b] -> round (100 * (a / b))] site-pontoon-built-count num-required-pontoons-per-site)"
 
 PLOT
-220
-457
-441
-649
+221
+470
+442
+662
 Average Bridge Completion (%)
 Time (min)
 Avg Completion (%)
@@ -1176,13 +1136,13 @@ true
 false
 "" ""
 PENS
-"default" 1.0 0 -11085214 true "" "plot (mean (map [[a b] -> round (100 * (a / b))] site-pontoon-built-count num-required-pontoons-per-site))"
+"default" 1.0 0 -11085214 true "" "plot (sum ((map [[a b] -> round (100 * (a / b))] site-pontoon-built-count num-required-pontoons-per-site)) / length chosen-site-ids)"
 
 PLOT
-0
-650
-219
-840
+1
+663
+220
+853
 Casualty Ratio (%)
 Time (min)
 Ratio (%)
@@ -1197,12 +1157,77 @@ PENS
 "default" 1.0 0 -2674135 true "" "plot (total-infantry-casualties / (total-infantry-used * 10 + 0.0001))"
 
 MONITOR
-176
-137
-298
-182
+166
+149
+288
+194
 Infantry Casualties
 total-infantry-casualties / 10
+17
+1
+11
+
+MONITOR
+404
+331
+569
+376
+Trucks Clogged NWS
+trucks-clogged
+17
+1
+11
+
+MONITOR
+403
+376
+570
+421
+Infantry Clogged NWS
+infantry-clogged
+17
+1
+11
+
+INPUTBOX
+187
+12
+282
+72
+wave-duration
+200.0
+1
+0
+Number
+
+INPUTBOX
+282
+12
+364
+72
+wave-pause
+60.0
+1
+0
+Number
+
+CHOOSER
+364
+56
+502
+101
+spacing-mode
+spacing-mode
+"Uniform" "Waves"
+0
+
+MONITOR
+402
+422
+485
+467
+Num Waves
+ifelse-value spacing-mode = \"Waves\" [\n ceiling (ticks / (wave-duration + wave-pause))\n]\n[\n \"N/A\"\n]
 17
 1
 11
