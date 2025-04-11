@@ -453,6 +453,7 @@ to move-units
         ifelse can-move? step-size [
           let target-x int (xcor + step-size * dx-from-heading heading)
           let target-y int (ycor + step-size * dy-from-heading heading)
+
           let target-patch patch target-x target-y
 
           ifelse target-patch != nobody [
@@ -518,7 +519,12 @@ to turn-into-site-when-arrived [ unit ]
 end
 
 to build-pontoon-bridges
-  foreach chosen-site-ids [site-id ->
+
+  let active-sites filter [site-id -> not (item site-id site-pontoon-bridge-built)] chosen-site-ids
+
+  foreach active-sites [site-id ->
+
+  ; foreach chosen-site-ids [site-id ->
     let builders-ready site-full-of-builders? site-id
     let num-pontoons-ready item site-id site-pontoon-count
     let num-pontoons-req item site-id num-required-pontoons-per-site
@@ -530,6 +536,7 @@ to build-pontoon-bridges
         draw-bridge site-id
         set site-pontoon-bridge-built replace-item site-id site-pontoon-bridge-built true
       ] [
+
         ;; Otherwise, if the necessary ppl/resources are there, add to the bridge currently under construction
         if builders-ready and (num-pontoons-ready >= 1) [
           let current-total-pontoons-built total-pontoons-built
