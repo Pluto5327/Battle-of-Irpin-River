@@ -1063,7 +1063,7 @@ CHOOSER
 site-selection-mode
 site-selection-mode
 "01 Shortest Bridges" "02 Shortest Bridges" "03 Shortest Bridges" "04 Shortest Bridges" "05 Shortest Bridges" "06 Shortest Bridges" "07 Shortest Bridges" "08 Shortest Bridges" "09 Shortest Bridges" "10 Shortest Bridges" "11 Shortest Bridges" "12 Shortest Bridges" "13 Shortest Bridges"
-12
+0
 
 MONITOR
 404
@@ -1213,7 +1213,7 @@ INPUTBOX
 364
 72
 wave-pause
-60.0
+30.0
 1
 0
 Number
@@ -1226,7 +1226,7 @@ CHOOSER
 spacing-mode
 spacing-mode
 "Uniform" "Waves"
-0
+1
 
 MONITOR
 402
@@ -1615,7 +1615,7 @@ NetLogo 6.4.0
       <value value="&quot;13 Shortest Bridges&quot;"/>
     </enumeratedValueSet>
   </experiment>
-  <experiment name="Vary Site-Selection Artillery Active" repetitions="1" runMetricsEveryStep="false">
+  <experiment name="Vary Site-Selection Artillery Active" repetitions="100" runMetricsEveryStep="false">
     <setup>setup</setup>
     <go>go</go>
     <metric>battle-outcome</metric>
@@ -1645,7 +1645,7 @@ NetLogo 6.4.0
       <value value="&quot;13 Shortest Bridges&quot;"/>
     </enumeratedValueSet>
   </experiment>
-  <experiment name="Vary Site-Selection Artillery Active Waves" repetitions="1" runMetricsEveryStep="true">
+  <experiment name="Vary Site-Selection Artillery Active Waves" repetitions="1" runMetricsEveryStep="false">
     <setup>setup</setup>
     <go>go</go>
     <metric>battle-outcome</metric>
@@ -1710,7 +1710,7 @@ NetLogo 6.4.0
       <value value="300"/>
     </enumeratedValueSet>
   </experiment>
-  <experiment name="Vary Site-Selection Artillery Active Waves (test)" repetitions="1" runMetricsEveryStep="true">
+  <experiment name="Vary Site-Selection Artillery Active Waves (test)" repetitions="1" runMetricsEveryStep="false">
     <setup>setup</setup>
     <go>go</go>
     <metric>battle-outcome</metric>
@@ -1750,6 +1750,7 @@ NetLogo 6.4.0
     <enumeratedValueSet variable="wave-duration">
       <value value="100"/>
       <value value="200"/>
+      <value value="300"/>
     </enumeratedValueSet>
   </experiment>
 </experiments>

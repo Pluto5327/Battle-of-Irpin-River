@@ -1,7 +1,7 @@
 "BehaviorSpace results (NetLogo 6.4.0)","Stats version 2.0"
 "IrpinModel.nlogo"
 "Vary Site-Selection Artillery Active Waves (test)"
-"04/12/2025 17:57:29:983 -0400"
+"04/12/2025 18:48:32:401 -0400"
 "min-pxcor","max-pxcor","min-pycor","max-pycor"
 "0","459","0","624"
 "turn-on-artillery?","turn-on-stop-conditions?","spacing-mode","site-selection-mode","wave-pause","wave-duration","[step]","(mean) total-infantry-crossed","(std) total-infantry-crossed","(mean) total-infantry-casualties / 10","(std) total-infantry-casualties / 10","(mean) total-infantry-used","(std) total-infantry-used","(mean) ticks","(std) ticks"
