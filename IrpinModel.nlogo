@@ -1645,6 +1645,113 @@ NetLogo 6.4.0
       <value value="&quot;13 Shortest Bridges&quot;"/>
     </enumeratedValueSet>
   </experiment>
+  <experiment name="Vary Site-Selection Artillery Active Waves" repetitions="1" runMetricsEveryStep="true">
+    <setup>setup</setup>
+    <go>go</go>
+    <metric>battle-outcome</metric>
+    <metric>total-infantry-crossed</metric>
+    <metric>total-infantry-casualties / 10</metric>
+    <metric>total-infantry-used</metric>
+    <metric>ticks</metric>
+    <enumeratedValueSet variable="turn-on-artillery?">
+      <value value="true"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="turn-on-stop-conditions?">
+      <value value="true"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="spacing-mode">
+      <value value="&quot;Waves&quot;"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="site-selection-mode">
+      <value value="&quot;01 Shortest Bridges&quot;"/>
+      <value value="&quot;02 Shortest Bridges&quot;"/>
+      <value value="&quot;03 Shortest Bridges&quot;"/>
+      <value value="&quot;04 Shortest Bridges&quot;"/>
+      <value value="&quot;05 Shortest Bridges&quot;"/>
+      <value value="&quot;06 Shortest Bridges&quot;"/>
+      <value value="&quot;07 Shortest Bridges&quot;"/>
+      <value value="&quot;08 Shortest Bridges&quot;"/>
+      <value value="&quot;09 Shortest Bridges&quot;"/>
+      <value value="&quot;10 Shortest Bridges&quot;"/>
+      <value value="&quot;11 Shortest Bridges&quot;"/>
+      <value value="&quot;12 Shortest Bridges&quot;"/>
+      <value value="&quot;13 Shortest Bridges&quot;"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="wave-pause">
+      <value value="30"/>
+      <value value="40"/>
+      <value value="50"/>
+      <value value="60"/>
+      <value value="70"/>
+      <value value="80"/>
+      <value value="90"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="wave-duration">
+      <value value="100"/>
+      <value value="110"/>
+      <value value="120"/>
+      <value value="130"/>
+      <value value="140"/>
+      <value value="150"/>
+      <value value="160"/>
+      <value value="170"/>
+      <value value="180"/>
+      <value value="190"/>
+      <value value="200"/>
+      <value value="210"/>
+      <value value="220"/>
+      <value value="230"/>
+      <value value="240"/>
+      <value value="250"/>
+      <value value="260"/>
+      <value value="270"/>
+      <value value="280"/>
+      <value value="290"/>
+      <value value="300"/>
+    </enumeratedValueSet>
+  </experiment>
+  <experiment name="Vary Site-Selection Artillery Active Waves (test)" repetitions="1" runMetricsEveryStep="true">
+    <setup>setup</setup>
+    <go>go</go>
+    <metric>battle-outcome</metric>
+    <metric>total-infantry-crossed</metric>
+    <metric>total-infantry-casualties / 10</metric>
+    <metric>total-infantry-used</metric>
+    <metric>ticks</metric>
+    <enumeratedValueSet variable="turn-on-artillery?">
+      <value value="true"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="turn-on-stop-conditions?">
+      <value value="true"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="spacing-mode">
+      <value value="&quot;Waves&quot;"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="site-selection-mode">
+      <value value="&quot;01 Shortest Bridges&quot;"/>
+      <value value="&quot;02 Shortest Bridges&quot;"/>
+      <value value="&quot;03 Shortest Bridges&quot;"/>
+      <value value="&quot;04 Shortest Bridges&quot;"/>
+      <value value="&quot;05 Shortest Bridges&quot;"/>
+      <value value="&quot;06 Shortest Bridges&quot;"/>
+      <value value="&quot;07 Shortest Bridges&quot;"/>
+      <value value="&quot;08 Shortest Bridges&quot;"/>
+      <value value="&quot;09 Shortest Bridges&quot;"/>
+      <value value="&quot;10 Shortest Bridges&quot;"/>
+      <value value="&quot;11 Shortest Bridges&quot;"/>
+      <value value="&quot;12 Shortest Bridges&quot;"/>
+      <value value="&quot;13 Shortest Bridges&quot;"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="wave-pause">
+      <value value="30"/>
+      <value value="60"/>
+      <value value="90"/>
+    </enumeratedValueSet>
+    <enumeratedValueSet variable="wave-duration">
+      <value value="100"/>
+      <value value="200"/>
+    </enumeratedValueSet>
+  </experiment>
 </experiments>
 @#$#@#$#@
 @#$#@#$#@
