@@ -1,0 +1,7 @@
+"BehaviorSpace results (NetLogo 6.4.0)","Stats version 2.0"
+"IrpinModel.nlogo"
+"Vary Site-Selection Artillery Active"
+"04/12/2025 16:43:45:181 -0400"
+"min-pxcor","max-pxcor","min-pycor","max-pycor"
+"0","459","0","624"
+"turn-on-artillery?","turn-on-stop-conditions?","site-selection-mode","[step]","(mean) total-infantry-crossed","(std) total-infantry-crossed","(mean) total-infantry-casualties / 10","(std) total-infantry-casualties / 10","(mean) total-infantry-used","(std) total-infantry-used","(mean) ticks","(std) ticks"
