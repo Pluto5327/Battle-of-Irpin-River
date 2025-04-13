@@ -1615,7 +1615,7 @@ NetLogo 6.4.0
       <value value="&quot;13 Shortest Bridges&quot;"/>
     </enumeratedValueSet>
   </experiment>
-  <experiment name="Vary Site-Selection Artillery Active" repetitions="100" runMetricsEveryStep="false">
+  <experiment name="Vary Site-Selection Artillery Active" repetitions="1000" runMetricsEveryStep="false">
     <setup>setup</setup>
     <go>go</go>
     <metric>battle-outcome</metric>
