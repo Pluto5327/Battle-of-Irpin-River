@@ -282,9 +282,6 @@ class IrpinDataAnalyzer:
         print("Basic statistics calculation completed.")
         return True
     
-    
-    
-       
     def create_boxplots(self):
         """Create box plots for success ratio and casualty ratio by site selection mode"""
         if self.data is None or not self.statistics:
@@ -385,8 +382,109 @@ class IrpinDataAnalyzer:
         
         plt.show()
     
+    def create_site_selection_comparison_plots(self):
+        """Create bar and box plots for each metric by site selection mode"""
+        if self.data is None:
+            print("No data. Please run preprocess_csv_files() first.")
+            return
 
-    
+        df = self.data.copy()
+        df['win'] = (df['battle_outcome'] == 'Victory').astype(int) * 100
+        df['casualty_pct'] = (df['total_infantry_casualties_10'] / df['total_infantry_used']) * 100
+
+        # Add only existing columns to metrics
+        metrics = [
+            ('win', 'Win %', 'Win%'),
+            ('casualty_pct', 'Casualty %', 'Casualty%'),
+        ]
+        if 'total_infantry_used' in df.columns:
+            metrics.append(('total_infantry_used', '# Troops Used', 'Troops Used'))
+        if 'total_pontoons_used' in df.columns:
+            metrics.append(('total_pontoons_used', '# Pontoons Used', 'Pontoons Used'))
+        if 'ticks' in df.columns:
+            metrics.append(('ticks', 'Ticks', 'Ticks'))
+
+        import matplotlib.pyplot as plt
+        import seaborn as sns
+        plt.style.use('seaborn-v0_8-whitegrid')
+
+        for col, ylabel, title in metrics:
+            plt.figure(figsize=(14, 6))
+            means = df.groupby('site_selection_mode')[col].mean()
+            sns.barplot(x=means.index, y=means.values, palette='viridis')
+            plt.ylabel(ylabel, fontsize=14)
+            plt.xlabel('Site Selection Mode', fontsize=14)
+            plt.title(f'Site-Selection vs. {title} (Mean)', fontsize=16, fontweight='bold')
+            plt.xticks(rotation=45, ha='right')
+            plt.tight_layout()
+            out_bar = os.path.join(self.output_dir, f"SiteSelection_vs_{col}_bar.png")
+            plt.savefig(out_bar, dpi=300, bbox_inches='tight')
+            print(f"Saved bar plot: {out_bar}")
+            plt.show()
+
+            plt.figure(figsize=(14, 6))
+            sns.boxplot(x='site_selection_mode', y=col, data=df, palette='viridis')
+            plt.ylabel(ylabel, fontsize=14)
+            plt.xlabel('Site Selection Mode', fontsize=14)
+            plt.title(f'Site-Selection vs. {title} (Boxplot)', fontsize=16, fontweight='bold')
+            plt.xticks(rotation=45, ha='right')
+            plt.tight_layout()
+            out_box = os.path.join(self.output_dir, f"SiteSelection_vs_{col}_box.png")
+            plt.savefig(out_box, dpi=300, bbox_inches='tight')
+            print(f"Saved boxplot: {out_box}")
+            plt.show()
+
+    def create_individual_site_selection_plots(self):
+        """Create individual bar and box plots for each metric by site selection mode"""
+        if self.data is None:
+            print("No data. Please run preprocess_csv_files() first.")
+            return
+
+        df = self.data.copy()
+        df['win'] = (df['battle_outcome'] == 'Victory').astype(int) * 100
+        df['casualty_pct'] = (df['total_infantry_casualties_10'] / df['total_infantry_used']) * 100
+
+        metrics = [
+            ('win', 'Win %', 'Win%'),
+            ('casualty_pct', 'Casualty %', 'Casualty%'),
+        ]
+        if 'total_infantry_used' in df.columns:
+            metrics.append(('total_infantry_used', '# Troops Used', 'Troops Used'))
+        if 'total_pontoons_used' in df.columns:
+            metrics.append(('total_pontoons_used', '# Pontoons Used', 'Pontoons Used'))
+        if 'ticks' in df.columns:
+            metrics.append(('ticks', 'Ticks', 'Ticks'))
+
+        plt.style.use('seaborn-v0_8-whitegrid')
+
+        for col, ylabel, title in metrics:
+            # Bar plot
+            plt.figure(figsize=(10, 6))
+            means = df.groupby('site_selection_mode')[col].mean()
+            sns.barplot(x=means.index, y=means.values, palette='viridis')
+            plt.ylabel(ylabel, fontsize=14)
+            plt.xlabel('Site Selection Mode', fontsize=14)
+            plt.title(f'Site-Selection vs. {title} (Mean)', fontsize=16, fontweight='bold')
+            plt.xticks(rotation=45, ha='right')
+            plt.tight_layout()
+            out_bar = os.path.join(self.output_dir, f"SiteSelection_vs_{col}_bar_individual.png")
+            plt.savefig(out_bar, dpi=300, bbox_inches='tight')
+            print(f"Saved bar plot: {out_bar}")
+            plt.show()
+
+            # Box plot
+            plt.figure(figsize=(10, 6))
+            sns.boxplot(x='site_selection_mode', y=col, data=df, palette='viridis')
+            plt.ylabel(ylabel, fontsize=14)
+            plt.xlabel('Site Selection Mode', fontsize=14)
+            plt.title(f'Site-Selection vs. {title} (Boxplot)', fontsize=16, fontweight='bold')
+            plt.xticks(rotation=45, ha='right')
+            plt.tight_layout()
+            out_box = os.path.join(self.output_dir, f"SiteSelection_vs_{col}_box_individual.png")
+            plt.savefig(out_box, dpi=300, bbox_inches='tight')
+            print(f"Saved boxplot: {out_box}")
+            plt.show()
+
     def create_visualizations(self):
         """Create all visualizations at once"""
         if not self.statistics:
@@ -400,12 +498,15 @@ class IrpinDataAnalyzer:
         
         # Create combined bar chart
         self.create_combined_bar_chart()
+
+        # Create comparison plots
+        self.create_site_selection_comparison_plots()
+
+        # Create individual plots
+        self.create_individual_site_selection_plots()
         
         print("All visualizations completed.")
         return True
-    
-    
-    
     
 def main():
     """Main function to execute the analysis."""
