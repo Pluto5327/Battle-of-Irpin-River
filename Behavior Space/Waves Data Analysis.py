@@ -283,20 +283,24 @@ class IrpinDataAnalyzer:
             
         print("\nStarting visualization creation.")
         
-        # Existing 3D scatter plot
+        # Original visualizations
         self._create_3d_scatter_plot()
+        self._create_win_rate_bar_chart()            
+        self._create_casualty_rate_bar_chart()         
+        self._create_combined_success_casualty_chart() 
+        self._create_heatmap_wave_parameters()         
+        self._create_3d_surface_plot()                 
+        self._create_success_threshold_comparison()
         
-        # New visualizations
-        self._create_win_rate_bar_chart()            # Win rate bar chart
-        self._create_casualty_rate_bar_chart()         # Casualty rate bar chart
-        self._create_combined_success_casualty_chart() # Combined chart for success and casualty rates
-        self._create_heatmap_wave_parameters()         # Heatmap of wave parameters
-        self._create_3d_surface_plot()                 # 3D surface plot
-        self._create_success_threshold_comparison()     # New comparison chart for success thresholds
-        self._create_uniform_vs_waves_bymode_bar_chart()  # Added by-mode comparison for Uniform vs Waves
+        # New visualizations requested by the user
+        print("\nCreating additional visualizations...")
+        self._create_uniform_vs_waves_bymode_bar_chart()  # Add this one first to fix the error
+        self._create_multiple_heatmaps()  # Create heatmaps for various metrics
+        self._create_3d_metrics_comparisons()  # Create 3D plots for all metrics
+        self._create_uniform_vs_waves_metrics_comparison()  # Create Waves vs Uniform comparisons
         
-        print("Visualization creation completed.")
-    
+        print("All visualization creation completed.")
+
     def _create_win_rate_bar_chart(self):
         """Bar chart showing win rates for each site selection strategy."""
         try:
@@ -388,143 +392,6 @@ class IrpinDataAnalyzer:
             
         except Exception as e:
             print(f"An error occurred while drawing the casualty rate chart: {e}")
-    
-    def _create_heatmap_wave_parameters(self):
-        """Heatmap for win rate and casualty rate based on wave-pause and wave-duration."""
-        try:
-            # Set plot style
-            self._set_plot_style()
-            
-            # Divide wave parameters into bins
-            wave_pause_bins = sorted(self.data['wave-pause'].unique())
-            wave_duration_bins = sorted(self.data['wave-duration'].unique())
-            
-            # Initialize matrices to store heatmap data for win rate and casualty rate
-            win_rate_matrix = np.zeros((len(wave_pause_bins), len(wave_duration_bins)))
-            casualty_rate_matrix = np.zeros((len(wave_pause_bins), len(wave_duration_bins)))
-            
-            # Calculate win rate and casualty rate for each combination of bins
-            for i, pause in enumerate(wave_pause_bins):
-                for j, duration in enumerate(wave_duration_bins):
-                    # Extract data corresponding to the current bin
-                    mask = (self.data['wave-pause'] == pause) & (self.data['wave-duration'] == duration)
-                    bin_data = self.data[mask]
-                    
-                    if len(bin_data) > 0:
-                        # Calculate win rate (percentage of Victory)
-                        victory_count = (bin_data['battle_outcome'] == 'Victory').sum()
-                        win_rate_matrix[i, j] = (victory_count / len(bin_data)) * 100
-                        
-                        # Calculate casualty rate
-                        casualties = bin_data['total_infantry_casualties_10'].sum()
-                        used = bin_data['total_infantry_used'].sum()
-                        if used > 0:
-                            casualty_rate_matrix[i, j] = (casualties / used) * 100
-                        else:
-                            casualty_rate_matrix[i, j] = 0
-            
-            # Display the two heatmaps side by side
-            fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(18, 8))
-            
-            # Heatmap for win rate
-            im1 = ax1.imshow(win_rate_matrix, cmap='YlGn', interpolation='nearest', aspect='auto')
-            ax1.set_title('Success Rate (%)', fontsize=16, fontweight='bold')
-            ax1.set_xlabel('Wave Duration', fontsize=14, fontweight='bold')
-            ax1.set_ylabel('Wave Pause', fontsize=14, fontweight='bold')
-            ax1.set_xticks(range(len(wave_duration_bins)))
-            ax1.set_yticks(range(len(wave_pause_bins)))
-            ax1.set_xticklabels(wave_duration_bins)
-            ax1.set_yticklabels(wave_pause_bins)
-            
-            # Add colorbar for win rate heatmap
-            cbar1 = fig.colorbar(im1, ax=ax1)
-            cbar1.set_label('Success Rate (%)', fontsize=12, fontweight='bold')
-            
-            # Heatmap for casualty rate
-            im2 = ax2.imshow(casualty_rate_matrix, cmap='YlOrRd', interpolation='nearest', aspect='auto')
-            ax2.set_title('Casualty Rate (%)', fontsize=16, fontweight='bold')
-            ax2.set_xlabel('Wave Duration', fontsize=14, fontweight='bold')
-            ax2.set_ylabel('Wave Pause', fontsize=14, fontweight='bold')
-            ax2.set_xticks(range(len(wave_duration_bins)))
-            ax2.set_yticks(range(len(wave_pause_bins)))
-            ax2.set_xticklabels(wave_duration_bins)
-            ax2.set_yticklabels(wave_pause_bins)
-            
-            # Add colorbar for casualty rate heatmap
-            cbar2 = fig.colorbar(im2, ax=ax2)
-            cbar2.set_label('Casualty Rate (%)', fontsize=12, fontweight='bold')
-            
-            # Display cell values
-            for i in range(len(wave_pause_bins)):
-                for j in range(len(wave_duration_bins)):
-                    ax1.text(j, i, f'{win_rate_matrix[i, j]:.1f}%', 
-                             ha='center', va='center', color='black', fontsize=10)
-                    ax2.text(j, i, f'{casualty_rate_matrix[i, j]:.1f}%', 
-                             ha='center', va='center', color='black', fontsize=10)
-            
-            plt.tight_layout()
-            
-            # Save the graph
-            graph_output_file = os.path.join(self.output_dir, "Wave_Parameters_Heatmap.png")
-            plt.savefig(graph_output_file, dpi=300, bbox_inches='tight')
-            print(f'Heatmap saved to "{graph_output_file}".')
-            
-        except Exception as e:
-            print(f"An error occurred while drawing the heatmap: {e}")
-    
-    def _create_3d_surface_plot(self):
-        """3D surface plot for win rate as a function of wave-pause and wave-duration."""
-        try:
-            # Set plot style
-            self._set_plot_style()
-            
-            # Divide wave parameters into bins
-            wave_pause_bins = sorted(self.data['wave-pause'].unique())
-            wave_duration_bins = sorted(self.data['wave-duration'].unique())
-            
-            # Prepare grid data for 3D surface plot
-            X, Y = np.meshgrid(wave_pause_bins, wave_duration_bins)
-            Z = np.zeros((len(wave_duration_bins), len(wave_pause_bins)))
-            
-            # Calculate win rate data
-            for i, duration in enumerate(wave_duration_bins):
-                for j, pause in enumerate(wave_pause_bins):
-                    mask = (self.data['wave-pause'] == pause) & (self.data['wave-duration'] == duration)
-                    data_bin = self.data[mask]
-                    if len(data_bin) > 0:
-                        win_count = (data_bin['battle_outcome'] == 'Victory').sum()
-                        Z[i, j] = (win_count / len(data_bin)) * 100
-            
-            # Create the plot
-            fig = plt.figure(figsize=(14, 12))
-            ax = fig.add_subplot(111, projection='3d')
-            
-            # 3D surface plot
-            surf = ax.plot_surface(X, Y, Z, cmap='viridis', edgecolor='none', alpha=0.8,
-                                  linewidth=0, antialiased=True)
-            
-            # Decorate the plot
-            ax.set_title('Success Rate as a Function of Wave Parameters', fontsize=16, fontweight='bold', pad=20)
-            ax.set_xlabel('Wave Pause', fontsize=14, fontweight='bold', labelpad=15)
-            ax.set_ylabel('Wave Duration', fontsize=14, fontweight='bold', labelpad=15)
-            ax.set_zlabel('Success Rate (%)', fontsize=14, fontweight='bold', labelpad=15)
-            
-            # Add a colorbar
-            cbar = fig.colorbar(surf, ax=ax, shrink=0.7, aspect=10)
-            cbar.set_label('Success Rate (%)', fontsize=12, fontweight='bold')
-            
-            # Adjust viewing angle
-            ax.view_init(elev=30, azim=45)
-            
-            plt.tight_layout()
-            
-            # Save the graph
-            graph_output_file = os.path.join(self.output_dir, "Success_Rate_Surface_3D.png")
-            plt.savefig(graph_output_file, dpi=300, bbox_inches='tight')
-            print(f'3D surface plot saved to "{graph_output_file}".')
-            
-        except Exception as e:
-            print(f"An error occurred while drawing the 3D surface plot: {e}")
 
     def _create_combined_success_casualty_chart(self):
         """Combined chart displaying both success and casualty rates for each site selection strategy."""
@@ -608,6 +475,189 @@ class IrpinDataAnalyzer:
         except Exception as e:
             print(f"An error occurred while drawing the combined chart: {e}")
 
+    def _create_heatmap_wave_parameters(self):
+        """Heatmap for win rate and casualty rate based on wave-pause and wave-duration."""
+        try:
+            # Set plot style
+            self._set_plot_style()
+            
+            # Divide wave parameters into bins
+            wave_pause_bins = sorted(self.data['wave-pause'].unique())
+            wave_duration_bins = sorted(self.data['wave-duration'].unique())
+            
+            # Initialize matrices to store heatmap data for win rate and casualty rate
+            win_rate_matrix = np.zeros((len(wave_pause_bins), len(wave_duration_bins)))
+            casualty_rate_matrix = np.zeros((len(wave_pause_bins), len(wave_duration_bins)))
+            
+            # Calculate win rate and casualty rate for each combination of bins
+            for i, pause in enumerate(wave_pause_bins):
+                for j, duration in enumerate(wave_duration_bins):
+                    # Extract data corresponding to the current bin
+                    mask = (self.data['wave-pause'] == pause) & (self.data['wave-duration'] == duration)
+                    bin_data = self.data[mask]
+                    
+                    if len(bin_data) > 0:
+                        # Calculate win rate (percentage of Victory)
+                        victory_count = (bin_data['battle_outcome'] == 'Victory').sum()
+                        win_rate_matrix[i, j] = (victory_count / len(bin_data)) * 100
+                        
+                        # Calculate casualty rate
+                        casualties = bin_data['total_infantry_casualties_10'].sum()
+                        used = bin_data['total_infantry_used'].sum()
+                        if used > 0:
+                            casualty_rate_matrix[i, j] = (casualties / used) * 100
+                        else:
+                            casualty_rate_matrix[i, j] = 0
+            
+            # Display the two heatmaps side by side
+            fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(18, 8))
+            
+            # Heatmap for win rate
+            im1 = ax1.imshow(win_rate_matrix, cmap='YlGn', interpolation='nearest', aspect='auto')
+            ax1.set_title('Success Rate (%)', fontsize=16, fontweight='bold')
+            ax1.set_xlabel('Wave Duration', fontsize=14, fontweight='bold')
+            ax1.set_ylabel('Wave Pause', fontsize=14, fontweight='bold')
+            ax1.set_xticks(range(len(wave_duration_bins)))
+            ax1.set_yticks(range(len(wave_pause_bins)))
+            ax1.set_xticklabels(wave_duration_bins)
+            ax1.set_yticklabels(wave_pause_bins)
+            
+            # Add colorbar for win rate heatmap
+            cbar1 = fig.colorbar(im1, ax=ax1)
+            cbar1.set_label('Success Rate (%)', fontsize=12, fontweight='bold')
+            
+            # Heatmap for casualty rate
+            im2 = ax2.imshow(casualty_rate_matrix, cmap='YlOrRd', interpolation='nearest', aspect='auto')
+            ax2.set_title('Casualty Rate (%)', fontsize=16, fontweight='bold')
+            ax2.set_xlabel('Wave Duration', fontsize=14, fontweight='bold')
+            ax2.set_ylabel('Wave Pause', fontsize=14, fontweight='bold')
+            ax2.set_xticks(range(len(wave_duration_bins)))
+            ax2.set_yticks(range(len(wave_pause_bins)))
+            ax2.set_xticklabels(wave_duration_bins)
+            ax2.set_yticklabels(wave_pause_bins)
+            
+            # Add colorbar for casualty rate heatmap
+            cbar2 = fig.colorbar(im2, ax=ax2)
+            cbar2.set_label('Casualty Rate (%)', fontsize=12, fontweight='bold')
+            
+            # Display cell values
+            for i in range(len(wave_pause_bins)):
+                for j in range(len(wave_duration_bins)):
+                    ax1.text(j, i, f'{win_rate_matrix[i, j]:.1f}%', 
+                             ha='center', va='center', color='black', fontsize=10)
+                    ax2.text(j, i, f'{casualty_rate_matrix[i, j]:.1f}%', 
+                             ha='center', va='center', color='black', fontsize=10)
+            
+            plt.tight_layout()
+            
+            # Save the graph
+            graph_output_file = os.path.join(self.output_dir, "Wave_Parameters_Heatmap.png")
+            plt.savefig(graph_output_file, dpi=300, bbox_inches='tight')
+            print(f'Heatmap saved to "{graph_output_file}".')
+            
+        except Exception as e:
+            print(f"An error occurred while drawing the heatmap: {e}")
+
+    def _create_3d_surface_plot(self):
+        """3D surface plot for win rate as a function of wave-pause and wave-duration."""
+        try:
+            # Set plot style
+            self._set_plot_style()
+            
+            # Divide wave parameters into bins
+            wave_pause_bins = sorted(self.data['wave-pause'].unique())
+            wave_duration_bins = sorted(self.data['wave-duration'].unique())
+            
+            # Prepare grid data for 3D surface plot
+            X, Y = np.meshgrid(wave_pause_bins, wave_duration_bins)
+            Z = np.zeros((len(wave_duration_bins), len(wave_pause_bins)))
+            
+            # Calculate win rate data
+            for i, duration in enumerate(wave_duration_bins):
+                for j, pause in enumerate(wave_pause_bins):
+                    mask = (self.data['wave-pause'] == pause) & (self.data['wave-duration'] == duration)
+                    data_bin = self.data[mask]
+                    if len(data_bin) > 0:
+                        win_count = (data_bin['battle_outcome'] == 'Victory').sum()
+                        Z[i, j] = (win_count / len(data_bin)) * 100
+            
+            # Create the plot
+            fig = plt.figure(figsize=(14, 12))
+            ax = fig.add_subplot(111, projection='3d')
+            
+            # 3D surface plot
+            surf = ax.plot_surface(X, Y, Z, cmap='viridis', edgecolor='none', alpha=0.8,
+                                  linewidth=0, antialiased=True)
+            
+            # Decorate the plot
+            ax.set_title('Success Rate as a Function of Wave Parameters', fontsize=16, fontweight='bold', pad=20)
+            ax.set_xlabel('Wave Pause', fontsize=14, fontweight='bold', labelpad=15)
+            ax.set_ylabel('Wave Duration', fontsize=14, fontweight='bold', labelpad=15)
+            ax.set_zlabel('Success Rate (%)', fontsize=14, fontweight='bold', labelpad=15)
+            
+            # Add a colorbar
+            cbar = fig.colorbar(surf, ax=ax, shrink=0.7, aspect=10)
+            cbar.set_label('Success Rate (%)', fontsize=12, fontweight='bold')
+            
+            # Adjust viewing angle
+            ax.view_init(elev=30, azim=45)
+            
+            plt.tight_layout()
+            
+            # Save the graph
+            graph_output_file = os.path.join(self.output_dir, "Success_Rate_Surface_3D.png")
+            plt.savefig(graph_output_file, dpi=300, bbox_inches='tight')
+            print(f'3D surface plot saved to "{graph_output_file}".')
+            
+        except Exception as e:
+            print(f"An error occurred while drawing the 3D surface plot: {e}")
+
+    def _create_success_threshold_comparison(self):
+        """Creates heatmaps showing success rate extremes by strategy performance categories."""
+        try:
+            self._set_plot_style()
+            # Determine high and low performance strategies
+            win_rates = self.statistics['win_rate']
+            sorted_modes = sorted(win_rates.items(), key=lambda x: x[1])
+            half = len(sorted_modes) // 2
+            low = [m for m, _ in sorted_modes[:half]]
+            high = [m for m, _ in sorted_modes[-half:]]
+            pauses = sorted(self.data['wave-pause'].unique())
+            durations = sorted(self.data['wave-duration'].unique())
+            high_mat = np.zeros((len(pauses), len(durations)))
+            low_mat = np.zeros_like(high_mat)
+            for i, p in enumerate(pauses):
+                for j, d in enumerate(durations):
+                    df_h = self.data[(self.data['wave-pause'] == p) & (self.data['wave-duration'] == d) & self.data['site_selection_mode'].isin(high)]
+                    df_l = self.data[(self.data['wave-pause'] == p) & (self.data['wave-duration'] == d) & self.data['site_selection_mode'].isin(low)]
+                    if len(df_h):
+                        high_mat[i, j] = (df_h['battle_outcome'] == 'Victory').mean() * 100
+                    if len(df_l):
+                        low_mat[i, j] = (df_l['battle_outcome'] == 'Victory').mean() * 100
+            # Plot heatmaps side by side
+            fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 6))
+            im1 = ax1.imshow(high_mat, cmap='YlGn', vmin=0, vmax=100, aspect='auto')
+            ax1.set_title('High-Performance Strategies')
+            ax1.set_xticks(range(len(durations)))
+            ax1.set_xticklabels(durations)
+            ax1.set_yticks(range(len(pauses)))
+            ax1.set_yticklabels(pauses)
+            fig.colorbar(im1, ax=ax1, label='Success Rate (%)')
+            im2 = ax2.imshow(low_mat, cmap='YlOrRd', vmin=0, vmax=100, aspect='auto')
+            ax2.set_title('Low-Performance Strategies')
+            ax2.set_xticks(range(len(durations)))
+            ax2.set_xticklabels(durations)
+            ax2.set_yticks(range(len(pauses)))
+            ax2.set_yticklabels(pauses)
+            fig.colorbar(im2, ax=ax2, label='Success Rate (%)')
+            plt.suptitle('Success by Strategy Performance')
+            plt.tight_layout()
+            out = os.path.join(self.output_dir, 'Success_Strategy_Comparison.png')
+            plt.savefig(out, dpi=300)
+            print(f'Saved strategy comparison heatmap to {out}')
+        except Exception as e:
+            print(f"Error drawing strategy comparison: {e}")
+
     def _create_uniform_vs_waves_bymode_bar_chart(self):
         """Bar chart comparing success rates by site selection mode between Waves (pause=70,duration=200) and Uniform."""
         try:
@@ -642,46 +692,326 @@ class IrpinDataAnalyzer:
             print(f'Saved by-mode comparison chart to {out}')
         except Exception as e:
             print(f'Error drawing by-mode comparison: {e}')
-
-    def _create_success_threshold_comparison(self):
-        """Creates heatmaps showing success rate extremes by strategy performance categories."""
+    
+    def _create_multiple_heatmaps(self):
+        """Creates multiple heatmaps comparing different metrics based on wave parameters."""
         try:
+            # Set plot style
             self._set_plot_style()
-            # Determine high and low performance strategies
-            win_rates = self.statistics['win_rate']
-            sorted_modes = sorted(win_rates.items(), key=lambda x: x[1])
-            half = len(sorted_modes) // 2
-            low = [m for m,_ in sorted_modes[:half]]
-            high = [m for m,_ in sorted_modes[-half:]]
-            pauses = sorted(self.data['wave-pause'].unique())
-            durations = sorted(self.data['wave-duration'].unique())
-            high_mat = np.zeros((len(pauses), len(durations)))
-            low_mat  = np.zeros_like(high_mat)
-            for i,p in enumerate(pauses):
-                for j,d in enumerate(durations):
-                    df_h = self.data[(self.data['wave-pause']==p)&(self.data['wave-duration']==d)&self.data['site_selection_mode'].isin(high)]
-                    df_l = self.data[(self.data['wave-pause']==p)&(self.data['wave-duration']==d)&self.data['site_selection_mode'].isin(low)]
-                    if len(df_h): high_mat[i,j] = (df_h['battle_outcome']=='Victory').mean()*100
-                    if len(df_l): low_mat[i,j]  = (df_l['battle_outcome']=='Victory').mean()*100
-            # Plot heatmaps side by side
-            fig,(ax1,ax2)=plt.subplots(1,2,figsize=(16,6))
-            im1=ax1.imshow(high_mat,cmap='YlGn',vmin=0,vmax=100,aspect='auto')
-            ax1.set_title('High-Performance Strategies')
-            ax1.set_xticks(range(len(durations))); ax1.set_xticklabels(durations)
-            ax1.set_yticks(range(len(pauses)));    ax1.set_yticklabels(pauses)
-            fig.colorbar(im1,ax=ax1,label='Success Rate (%)')
-            im2=ax2.imshow(low_mat,cmap='YlOrRd',vmin=0,vmax=100,aspect='auto')
-            ax2.set_title('Low-Performance Strategies')
-            ax2.set_xticks(range(len(durations))); ax2.set_xticklabels(durations)
-            ax2.set_yticks(range(len(pauses)));    ax2.set_yticklabels(pauses)
-            fig.colorbar(im2,ax=ax2,label='Success Rate (%)')
-            plt.suptitle('Success by Strategy Performance')
+            
+            # Get wave parameters
+            wave_pause_bins = sorted(self.data['wave-pause'].unique())
+            wave_duration_bins = sorted(self.data['wave-duration'].unique())
+            
+            # Define metrics to analyze
+            metrics = {
+                'Win Rate': lambda df: (df['battle_outcome'] == 'Victory').mean() * 100,
+                'Casualty Rate': lambda df: (df['total_infantry_casualties_10'].sum() / df['total_infantry_used'].sum()) * 100 if df['total_infantry_used'].sum() > 0 else 0,
+                'Troops Used': lambda df: df['total_infantry_used'].mean(),
+                'Pontoons Used': lambda df: df['total_pontoons_used'].mean(),
+                'Ticks (Duration)': lambda df: df['ticks'].mean()
+            }
+            
+            # Use a 3x2 subplot grid for all metrics
+            fig, axes = plt.subplots(3, 2, figsize=(20, 24))
+            axes = axes.flatten()  # Flatten for easier indexing
+            
+            # Set colormaps for different metrics
+            colormaps = {
+                'Win Rate': 'YlGn',
+                'Casualty Rate': 'YlOrRd',
+                'Troops Used': 'Blues',
+                'Pontoons Used': 'Purples',
+                'Ticks (Duration)': 'Oranges'
+            }
+            
+            # Create heatmap for each metric
+            for i, (metric_name, metric_func) in enumerate(metrics.items()):
+                if i >= len(axes):
+                    break  # Safety check in case we have more metrics than axes
+                
+                # Create data matrix for this metric
+                data_matrix = np.zeros((len(wave_pause_bins), len(wave_duration_bins)))
+                
+                # Calculate metric value for each wave parameter combination
+                for p_idx, pause in enumerate(wave_pause_bins):
+                    for d_idx, duration in enumerate(wave_duration_bins):
+                        mask = (self.data['wave-pause'] == pause) & (self.data['wave-duration'] == duration)
+                        data_bin = self.data[mask]
+                        if len(data_bin) > 0:
+                            data_matrix[p_idx, d_idx] = metric_func(data_bin)
+                
+                # Draw heatmap
+                ax = axes[i]
+                im = ax.imshow(data_matrix, cmap=colormaps.get(metric_name, 'viridis'), 
+                              interpolation='nearest', aspect='auto')
+                
+                # Add colorbar
+                cbar = fig.colorbar(im, ax=ax)
+                cbar.set_label(metric_name, fontsize=12, fontweight='bold')
+                
+                # Label axes
+                ax.set_title(f'{metric_name} by Wave Parameters', fontsize=16, fontweight='bold')
+                ax.set_xlabel('Wave Duration', fontsize=14, fontweight='bold')
+                ax.set_ylabel('Wave Pause', fontsize=14, fontweight='bold')
+                ax.set_xticks(range(len(wave_duration_bins)))
+                ax.set_yticks(range(len(wave_pause_bins)))
+                ax.set_xticklabels(wave_duration_bins)
+                ax.set_yticklabels(wave_pause_bins)
+                
+                # Add text labels to cells
+                for p_idx in range(len(wave_pause_bins)):
+                    for d_idx in range(len(wave_duration_bins)):
+                        # Format differs based on metric
+                        if 'Rate' in metric_name:
+                            text = f'{data_matrix[p_idx, d_idx]:.1f}%'
+                        elif 'Troops' in metric_name or 'Pontoons' in metric_name:
+                            text = f'{data_matrix[p_idx, d_idx]:.1f}'
+                        else:
+                            text = f'{data_matrix[p_idx, d_idx]:.0f}'
+                        
+                        # Add text with contrasting color depending on background
+                        text_color = 'white' if im.norm(data_matrix[p_idx, d_idx]) > 0.5 else 'black'
+                        ax.text(d_idx, p_idx, text, ha='center', va='center', 
+                               color=text_color, fontsize=9, fontweight='bold')
+            
+            # Remove unused subplot if any
+            if len(metrics) < len(axes):
+                for j in range(len(metrics), len(axes)):
+                    fig.delaxes(axes[j])
+            
             plt.tight_layout()
-            out=os.path.join(self.output_dir,'Success_Strategy_Comparison.png')
-            plt.savefig(out,dpi=300)
-            print(f'Saved strategy comparison heatmap to {out}')
+            
+            # Save the graph
+            graph_output_file = os.path.join(self.output_dir, "Multiple_Metrics_Heatmaps.png")
+            plt.savefig(graph_output_file, dpi=300, bbox_inches='tight')
+            print(f'Multiple metrics heatmaps saved to "{graph_output_file}".')
+            
         except Exception as e:
-            print(f"Error drawing strategy comparison: {e}")
+            print(f"An error occurred while drawing multiple heatmaps: {e}")
+    
+    def _create_3d_metrics_comparisons(self):
+        """Creates 3D plots comparing Wave Pause, Wave Duration, and Site Selection with various metrics."""
+        try:
+            # Set plot style
+            self._set_plot_style()
+            
+            # Get parameters
+            site_modes = sorted(self.data['site_selection_mode'].unique())
+            wave_pauses = sorted(self.data['wave-pause'].unique())
+            wave_durations = sorted(self.data['wave-duration'].unique())
+            
+            # Create numerical mapping for site selection modes
+            mode_to_num = {mode: i for i, mode in enumerate(site_modes)}
+            
+            # Define metrics to analyze
+            metrics = {
+                'Win Rate': {'func': lambda df: (df['battle_outcome'] == 'Victory').mean() * 100, 'cmap': 'YlGn'},
+                'Casualty Rate': {'func': lambda df: (df['total_infantry_casualties_10'].sum() / df['total_infantry_used'].sum()) * 100 if df['total_infantry_used'].sum() > 0 else 0, 'cmap': 'YlOrRd'},
+                'Troops Used': {'func': lambda df: df['total_infantry_used'].mean(), 'cmap': 'Blues'},
+                'Pontoons Used': {'func': lambda df: df['total_pontoons_used'].mean(), 'cmap': 'Purples'},
+                'Battle Duration': {'func': lambda df: df['ticks'].mean(), 'cmap': 'Oranges'}
+            }
+            
+            # Create one figure per metric
+            for metric_name, metric_info in metrics.items():
+                fig = plt.figure(figsize=(16, 12))
+                ax = fig.add_subplot(111, projection='3d')
+                
+                # Prepare data for scatter plot
+                x_data, y_data, z_data, values = [], [], [], []
+                
+                # For each combination of parameters, calculate metric value
+                for mode in site_modes:
+                    for pause in wave_pauses:
+                        for duration in wave_durations:
+                            mask = ((self.data['site_selection_mode'] == mode) & 
+                                    (self.data['wave-pause'] == pause) & 
+                                    (self.data['wave-duration'] == duration))
+                            
+                            subset_data = self.data[mask]
+                            
+                            if len(subset_data) > 0:
+                                x_data.append(pause)
+                                y_data.append(duration)
+                                z_data.append(mode_to_num[mode])
+                                values.append(metric_info['func'](subset_data))
+                
+                # Normalize values for coloring
+                if values:
+                    norm = plt.Normalize(min(values), max(values))
+                    colors = plt.cm.get_cmap(metric_info['cmap'])(norm(values))
+                    
+                    # Create scatter plot
+                    scatter = ax.scatter(x_data, y_data, z_data, c=colors, 
+                                        s=100, marker='o', alpha=0.8, edgecolor='black')
+                    
+                    # Add colorbar
+                    cbar = fig.colorbar(plt.cm.ScalarMappable(norm=norm, cmap=metric_info['cmap']), 
+                                       ax=ax, pad=0.1, shrink=0.7)
+                    cbar.set_label(metric_name, fontsize=14, fontweight='bold')
+                    
+                    # Set labels and title
+                    ax.set_xlabel('Wave Pause', fontsize=14, fontweight='bold', labelpad=10)
+                    ax.set_ylabel('Wave Duration', fontsize=14, fontweight='bold', labelpad=10)
+                    ax.set_zlabel('Site Selection Strategy', fontsize=14, fontweight='bold', labelpad=10)
+                    ax.set_title(f'3D Comparison of {metric_name}', fontsize=16, fontweight='bold', pad=20)
+                    
+                    # Set z-axis ticks to use site selection mode names
+                    ax.set_zticks(list(mode_to_num.values()))
+                    ax.set_zticklabels(list(mode_to_num.keys()), rotation=30)
+                    
+                    # Adjust view angle
+                    ax.view_init(elev=30, azim=45)
+                    
+                    plt.tight_layout()
+                    
+                    # Save figure
+                    out_path = os.path.join(self.output_dir, f"3D_{metric_name.replace(' ', '_')}_Comparison.png")
+                    plt.savefig(out_path, dpi=300, bbox_inches='tight')
+                    print(f'3D {metric_name} comparison saved to "{out_path}".')
+                    
+                plt.close(fig)
+            
+        except Exception as e:
+            print(f"An error occurred while creating 3D metrics comparisons: {e}")
+    
+    def _create_uniform_vs_waves_metrics_comparison(self):
+        """Creates multiple bar charts comparing Waves (pause=70, duration=200) vs Uniform across various metrics."""
+        try:
+            # Set plot style
+            self._set_plot_style()
+            
+            # Filter waves data for the specific parameters
+            best_waves = self.data[(self.data['wave-pause']==70) & (self.data['wave-duration']==200)]
+            
+            # Load uniform data
+            try:
+                uni = pd.read_csv(self.uniform_file, skiprows=6)
+                uni.rename(columns={
+                    'site-selection-mode': 'site_selection_mode',
+                    'battle-outcome': 'battle_outcome',
+                    'total-infantry-used': 'total_infantry_used',
+                    'total-infantry-casualties / 10': 'total_infantry_casualties_10',
+                    'total-infantry-crossed': 'total_infantry_crossed',
+                    'total-pontoons-used': 'total_pontoons_used',
+                    '[step]': 'ticks'
+                }, inplace=True)
+            except Exception as e:
+                print(f"Error loading uniform data: {e}")
+                return
+            
+            # Define metrics to compare
+            metrics = [
+                {
+                    'name': 'Success Rate (%)',
+                    'waves_func': lambda df: (df['battle_outcome'] == 'Victory').mean() * 100,
+                    'uni_func': lambda df: (df['battle_outcome'] == 'Victory').mean() * 100,
+                    'format': '{:.1f}%'
+                },
+                {
+                    'name': 'Casualty Rate (%)',
+                    'waves_func': lambda df: (df['total_infantry_casualties_10'].sum() / df['total_infantry_used'].sum()) * 100 if df['total_infantry_used'].sum() > 0 else 0,
+                    'uni_func': lambda df: (df['total_infantry_casualties_10'].sum() / df['total_infantry_used'].sum()) * 100 if df['total_infantry_used'].sum() > 0 else 0,
+                    'format': '{:.1f}%'
+                },
+                {
+                    'name': 'Troops Used',
+                    'waves_func': lambda df: df['total_infantry_used'].mean(),
+                    'uni_func': lambda df: df['total_infantry_used'].mean(),
+                    'format': '{:.0f}'
+                },
+                {
+                    'name': 'Pontoons Used',
+                    'waves_func': lambda df: df['total_pontoons_used'].mean(),
+                    'uni_func': lambda df: df['total_pontoons_used'].mean(),
+                    'format': '{:.1f}'
+                },
+                {
+                    'name': 'Battle Duration (ticks)',
+                    'waves_func': lambda df: df['ticks'].mean(),
+                    'uni_func': lambda df: df['ticks'].mean(),
+                    'format': '{:.0f}'
+                }
+            ]
+            
+            # Get unique site selection modes from both datasets
+            all_modes = sorted(set(best_waves['site_selection_mode'].unique()).union(
+                               set(uni['site_selection_mode'].unique())), key=str)
+            
+            # Create a figure for each metric
+            for metric in metrics:
+                fig, ax = plt.subplots(figsize=(14, 8))
+                
+                # Compute metric values for each mode
+                waves_values = []
+                uni_values = []
+                
+                for mode in all_modes:
+                    # Waves data for this mode
+                    waves_mode_data = best_waves[best_waves['site_selection_mode'] == mode]
+                    if len(waves_mode_data) > 0:
+                        waves_values.append(metric['waves_func'](waves_mode_data))
+                    else:
+                        waves_values.append(0)
+                    
+                    # Uniform data for this mode
+                    uni_mode_data = uni[uni['site_selection_mode'] == mode]
+                    if len(uni_mode_data) > 0:
+                        uni_values.append(metric['uni_func'](uni_mode_data))
+                    else:
+                        uni_values.append(0)
+                
+                # Create bar chart
+                x = np.arange(len(all_modes))
+                width = 0.35
+                
+                waves_bars = ax.bar(x - width/2, waves_values, width, label='Waves (p=70, d=200)', 
+                                   color='#3498db', edgecolor='black', linewidth=0.8)
+                uni_bars = ax.bar(x + width/2, uni_values, width, label='Uniform', 
+                                 color='#e74c3c', edgecolor='black', linewidth=0.8)
+                
+                # Add value labels
+                for bar, value in zip(waves_bars, waves_values):
+                    height = bar.get_height()
+                    ax.annotate(metric['format'].format(value),
+                               xy=(bar.get_x() + bar.get_width()/2, height),
+                               xytext=(0, 3),  # 3 points vertical offset
+                               textcoords="offset points",
+                               ha='center', va='bottom', fontsize=9)
+                
+                for bar, value in zip(uni_bars, uni_values):
+                    height = bar.get_height()
+                    ax.annotate(metric['format'].format(value),
+                               xy=(bar.get_x() + bar.get_width()/2, height),
+                               xytext=(0, 3),  # 3 points vertical offset
+                               textcoords="offset points",
+                               ha='center', va='bottom', fontsize=9)
+                
+                # Set chart properties
+                ax.set_xlabel('Site Selection Strategy', fontsize=14, fontweight='bold')
+                ax.set_ylabel(metric['name'], fontsize=14, fontweight='bold')
+                ax.set_title(f'Waves vs Uniform: {metric["name"]} by Site Selection Mode', 
+                            fontsize=16, fontweight='bold', pad=20)
+                ax.set_xticks(x)
+                ax.set_xticklabels(all_modes, rotation=45, ha='right')
+                ax.legend(fontsize=12)
+                
+                # Add grid lines
+                ax.grid(axis='y', linestyle='--', alpha=0.7)
+                
+                plt.tight_layout()
+                
+                # Save the chart
+                safe_name = metric['name'].replace(' ', '_').replace('(', '').replace(')', '').replace('%', 'pct')
+                out_path = os.path.join(self.output_dir, f"Waves_vs_Uniform_{safe_name}.png")
+                plt.savefig(out_path, dpi=300, bbox_inches='tight')
+                print(f'Waves vs Uniform {metric["name"]} comparison saved to "{out_path}".')
+                
+                plt.close(fig)
+                
+        except Exception as e:
+            print(f"An error occurred while creating Waves vs Uniform comparison: {e}")
 
 class UniformDataAnalyzer:
     def __init__(self, script_dir=None):
