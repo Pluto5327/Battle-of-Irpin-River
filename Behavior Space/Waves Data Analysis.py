@@ -3,6 +3,8 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D  # For 3D plotting
+import matplotlib
+matplotlib.use('Agg')
 
 
 class IrpinDataAnalyzer:
@@ -16,79 +18,34 @@ class IrpinDataAnalyzer:
             self.script_dir = script_dir
         
         self.output_dir = os.path.join(self.script_dir, "Waves - with Artillery")
+        self.data_file = os.path.join(self.output_dir, "Waves_Data_Combined_Final.csv")  # Updated to use the provided file
+        self.uniform_file = os.path.join(self.script_dir, 'Uniform - with Artillery', 'IrpinModel Vary Site-Selection Artillery Active-table.csv')
         self.data = None  # Variable to store the loaded data
         self.statistics = {}  # Dictionary to store computed statistics
-    
-    def preprocess_csv_files(self, file1=None, file2=None):
-        """Reads CSV files and preprocesses the data.
-        
-        Args:
-            file1: Path to the first CSV file (if None, uses the default path)
-            file2: Path to the second CSV file (if None, uses the default path)
-            
-        Returns:
-            bool: Whether the processing succeeded or not.
-        """
-        if file1 is None:
-            file1 = os.path.join(self.output_dir, "1 of 2 - IrpinModel Vary Site-Selection Artillery Active Waves-table.csv")
-        if file2 is None:
-            file2 = os.path.join(self.output_dir, "2 of 2 - IrpinModel Vary Site-Selection Artillery Active Waves-table.csv")
-        
-        print("Starting CSV file preprocessing.")
-        
+
+    def load_data(self):
+        """Loads the combined data from the provided CSV file."""
+        print("Loading data from the combined CSV file.")
         try:
-            # NetLogo output files have the header on the 7th line; data starts on the 8th line (skiprows=6)
-            T1 = pd.read_csv(file1, skiprows=6)
-            print("File 1 successfully loaded.")
-            
-            T2 = pd.read_csv(file2, skiprows=6)
-            print("File 2 successfully loaded.")
+            # Load the data
+            self.data = pd.read_csv(self.data_file)
+            # Rename columns to use snake_case internal names
+            self.data.rename(columns={
+                'site-selection-mode': 'site_selection_mode',
+                'battle-outcome': 'battle_outcome',
+                'infantry-used': 'total_infantry_used',
+                'infantry-casualties': 'total_infantry_casualties_10',
+                'infantry-crossed': 'total_infantry_crossed',
+                'pontoons-used': 'total_pontoons_used',
+                '[step]': 'ticks'
+            }, inplace=True)
+            print("Columns after rename:", self.data.columns.tolist())
+            print("Data successfully loaded.")
+            print("----- Loaded Data (Head) -----")
+            print(self.data.head())
         except Exception as e:
-            print(f"An error occurred while reading CSV files: {e}")
-            self._inspect_csv_files([file1, file2])
-            return False
-
-        # Standardize column names (handle spaces or hyphens)
-        T1, T2 = self._standardize_column_names(T1, T2)
-        
-        # Remove unnecessary columns
-        col_to_remove = '08 Shortest Bridges'
-        if col_to_remove in T1.columns:
-            T1 = T1.drop(columns=[col_to_remove])
-        if col_to_remove in T2.columns:
-            T2 = T2.drop(columns=[col_to_remove])
-
-        # Extract only the variables common to both tables and follow T1's ordering
-        common_vars = [col for col in T1.columns if col in T2.columns]
-        T1 = T1[common_vars]
-        T2 = T2[common_vars]
-
-        # Concatenate tables vertically
-        self.data = pd.concat([T1, T2], ignore_index=True)
-        
-        print("----- Preprocessed Data (Head) -----")
-        print(self.data.head())
-
-        # Save the combined table to a CSV file
-        output_data_file = os.path.join(self.output_dir, "CombinedData_New.csv")
-        self.data.to_csv(output_data_file, index=False)
-        print(f'Combined data saved to "{output_data_file}".')
-        
-        return True
-    
-    def _inspect_csv_files(self, file_paths):
-        """Internal method to inspect the CSV file contents."""
-        for i, file_path in enumerate(file_paths, 1):
-            try:
-                print(f"\nContent check for File {i}:")
-                with open(file_path, 'r', encoding='utf-8') as f:
-                    for j, line in enumerate(f):
-                        if j < 10:  # Only display the first 10 lines
-                            print(f"Line {j+1}: {line.strip()}")
-                        else:
-                            break
-            except Exception as read_error:
-                print(f"Failed to read file {i}: {read_error}")
+            print(f"An error occurred while loading the data: {e}")
+            self.data = None
     
     def _standardize_column_names(self, T1, T2):
         """Internal method to standardize column names."""
@@ -112,7 +69,7 @@ class IrpinDataAnalyzer:
             dict: Dictionary containing the computed statistics.
         """
         if self.data is None:
-            print("Data has not been loaded. Please run the preprocess_csv_files method first.")
+            print("Data has not been loaded. Please run the load_data method first.")
             return None
         
         print("\nStarting statistical calculation.")
@@ -308,7 +265,6 @@ class IrpinDataAnalyzer:
             plt.savefig(graph_output_file, dpi=300, bbox_inches='tight')
             print(f'3D graph saved to "{graph_output_file}".')
 
-            plt.show()
         except Exception as e:
             print(f"An error occurred while drawing the 3D graph: {e}")
             print(f"Error details: {str(e)}")
@@ -322,7 +278,7 @@ class IrpinDataAnalyzer:
     def create_visualizations(self):
         """Generates visualizations for the data."""
         if self.data is None or not self.statistics:
-            print("Data or statistical information missing. Please run preprocess_csv_files and calculate_statistics methods first.")
+            print("Data or statistical information missing. Please run load_data and calculate_statistics methods first.")
             return
             
         print("\nStarting visualization creation.")
@@ -337,6 +293,7 @@ class IrpinDataAnalyzer:
         self._create_heatmap_wave_parameters()         # Heatmap of wave parameters
         self._create_3d_surface_plot()                 # 3D surface plot
         self._create_success_threshold_comparison()     # New comparison chart for success thresholds
+        self._create_uniform_vs_waves_bymode_bar_chart()  # Added by-mode comparison for Uniform vs Waves
         
         print("Visualization creation completed.")
     
@@ -383,7 +340,6 @@ class IrpinDataAnalyzer:
             plt.savefig(graph_output_file, dpi=300, bbox_inches='tight')
             print(f'Success rate bar chart saved to "{graph_output_file}".')
             
-            plt.show()
         except Exception as e:
             print(f"An error occurred while drawing the win rate chart: {e}")
     
@@ -430,7 +386,6 @@ class IrpinDataAnalyzer:
             plt.savefig(graph_output_file, dpi=300, bbox_inches='tight')
             print(f'Casualty rate bar chart saved to "{graph_output_file}".')
             
-            plt.show()
         except Exception as e:
             print(f"An error occurred while drawing the casualty rate chart: {e}")
     
@@ -514,7 +469,6 @@ class IrpinDataAnalyzer:
             plt.savefig(graph_output_file, dpi=300, bbox_inches='tight')
             print(f'Heatmap saved to "{graph_output_file}".')
             
-            plt.show()
         except Exception as e:
             print(f"An error occurred while drawing the heatmap: {e}")
     
@@ -569,7 +523,6 @@ class IrpinDataAnalyzer:
             plt.savefig(graph_output_file, dpi=300, bbox_inches='tight')
             print(f'3D surface plot saved to "{graph_output_file}".')
             
-            plt.show()
         except Exception as e:
             print(f"An error occurred while drawing the 3D surface plot: {e}")
 
@@ -652,149 +605,221 @@ class IrpinDataAnalyzer:
             plt.savefig(graph_output_file, dpi=300, bbox_inches='tight')
             print(f'Combined chart saved to "{graph_output_file}".')
             
-            plt.show()
         except Exception as e:
             print(f"An error occurred while drawing the combined chart: {e}")
 
-def _create_success_threshold_comparison(self):
-    """Creates heatmaps showing success rates for different site selection strategies."""
-    try:
-        # Set plot style
-        self._set_plot_style()
-        
-        # Get unique site selection modes
-        site_selection_modes = sorted(self.data['site_selection_mode'].unique())
-        
-        # We'll focus on two main categories of site selection strategies
-        # Strategies with success rate >= 75% and those with success rate <= 25%
-        high_success_strategies = []
-        low_success_strategies = []
-        
-        # Determine which strategies fall into which category
-        win_rates = self.statistics['win_rate']
-        for mode, rate in win_rates.items():
-            if rate >= 75:
-                high_success_strategies.append(mode)
-            elif rate <= 25:
-                low_success_strategies.append(mode)
-        
-        # If we don't have strategies in both categories, adjust thresholds
-        if not high_success_strategies or not low_success_strategies:
-            # Sort strategies by win rate
-            sorted_strategies = sorted(win_rates.items(), key=lambda x: x[1], reverse=True)
-            
-            # Take top half as high success and bottom half as low success
-            mid_point = len(sorted_strategies) // 2
-            high_success_strategies = [mode for mode, _ in sorted_strategies[:mid_point]]
-            low_success_strategies = [mode for mode, _ in sorted_strategies[-mid_point:]]
-        
-        # Divide wave parameters into bins
-        wave_pause_bins = sorted(self.data['wave-pause'].unique())
-        wave_duration_bins = sorted(self.data['wave-duration'].unique())
-        
-        # Create success rate matrices for each category
-        high_success_matrix = np.zeros((len(wave_pause_bins), len(wave_duration_bins)))
-        low_success_matrix = np.zeros((len(wave_pause_bins), len(wave_duration_bins)))
-        
-        # Calculate success rates for high success strategies
-        for i, pause in enumerate(wave_pause_bins):
-            for j, duration in enumerate(wave_duration_bins):
-                # For high success strategies
-                high_mask = (
-                    self.data['wave-pause'] == pause 
-                    & (self.data['wave-duration'] == duration)
-                    & self.data['site_selection_mode'].isin(high_success_strategies)
-                )
-                high_data = self.data[high_mask]
-                
-                if len(high_data) > 0:
-                    victory_count = (high_data['battle_outcome'] == 'Victory').sum()
-                    high_success_matrix[i, j] = (victory_count / len(high_data)) * 100
-                
-                # For low success strategies
-                low_mask = (
-                    self.data['wave-pause'] == pause 
-                    & (self.data['wave-duration'] == duration)
-                    & self.data['site_selection_mode'].isin(low_success_strategies)
-                )
-                low_data = self.data[low_mask]
-                
-                if len(low_data) > 0:
-                    victory_count = (low_data['battle_outcome'] == 'Victory').sum()
-                    low_success_matrix[i, j] = (victory_count / len(low_data)) * 100
-        
-        # Create figure with two heatmaps
-        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(18, 8))
-        
-        # Heatmap for high success strategies
-        im1 = ax1.imshow(high_success_matrix, cmap='YlGn', interpolation='nearest', 
-                      vmin=0, vmax=100, aspect='auto')
-        
-        ax1.set_title(f'Success Rate for High-Performance Strategies\n({", ".join(high_success_strategies)})', 
-                   fontsize=14, fontweight='bold', pad=20)
-        ax1.set_xlabel('Wave Duration', fontsize=12, fontweight='bold')
-        ax1.set_ylabel('Wave Pause', fontsize=12, fontweight='bold')
-        
-        # Configure axis ticks
-        ax1.set_xticks(range(len(wave_duration_bins)))
-        ax1.set_yticks(range(len(wave_pause_bins)))
-        ax1.set_xticklabels(wave_duration_bins)
-        ax1.set_yticklabels(wave_pause_bins)
-        
-        # Add colorbar
-        cbar1 = fig.colorbar(im1, ax=ax1)
-        cbar1.set_label('Success Rate (%)', fontsize=12, fontweight='bold')
-        
-        # Heatmap for low success strategies
-        im2 = ax2.imshow(low_success_matrix, cmap='YlOrRd', interpolation='nearest', 
-                      vmin=0, vmax=100, aspect='auto')
-        
-        ax2.set_title(f'Success Rate for Low-Performance Strategies\n({", ".join(low_success_strategies)})', 
-                   fontsize=14, fontweight='bold', pad=20)
-        ax2.set_xlabel('Wave Duration', fontsize=12, fontweight='bold')
-        ax2.set_ylabel('Wave Pause', fontsize=12, fontweight='bold')
-        
-        # Configure axis ticks
-        ax2.set_xticks(range(len(wave_duration_bins)))
-        ax2.set_yticks(range(len(wave_pause_bins)))
-        ax2.set_xticklabels(wave_duration_bins)
-        ax2.set_yticklabels(wave_pause_bins)
-        
-        # Add colorbar
-        cbar2 = fig.colorbar(im2, ax=ax2)
-        cbar2.set_label('Success Rate (%)', fontsize=12, fontweight='bold')
-        
-        # Add cell values to both heatmaps
-        for i in range(len(wave_pause_bins)):
-            for j in range(len(wave_duration_bins)):
-                # High success matrix values
-                if high_success_matrix[i, j] > 0:
-                    text_color = 'white' if high_success_matrix[i, j] > 70 else 'black'
-                    ax1.text(j, i, f'{high_success_matrix[i, j]:.0f}%', 
-                          ha='center', va='center', 
-                          color=text_color, fontsize=10, fontweight='bold')
-                
-                # Low success matrix values
-                if low_success_matrix[i, j] > 0:
-                    text_color = 'white' if low_success_matrix[i, j] > 70 else 'black'
-                    ax2.text(j, i, f'{low_success_matrix[i, j]:.0f}%', 
-                          ha='center', va='center', 
-                          color=text_color, fontsize=10, fontweight='bold')
-        
-        plt.suptitle('Comparison of Wave Parameters by Strategy Performance', 
-                   fontsize=16, fontweight='bold')
-        
-        plt.tight_layout()
-        
-        # Save the graph
-        graph_output_file = os.path.join(self.output_dir, "Success_Strategy_Comparison.png")
-        plt.savefig(graph_output_file, dpi=300, bbox_inches='tight')
-        print(f'Strategy comparison heatmap saved to "{graph_output_file}".')
-        
-        plt.show()
-    except Exception as e:
-        print(f"An error occurred while drawing the strategy comparison: {e}")
-        print(f"Error details: {str(e)}")
+    def _create_uniform_vs_waves_bymode_bar_chart(self):
+        """Bar chart comparing success rates by site selection mode between Waves (pause=70,duration=200) and Uniform."""
+        try:
+            self._set_plot_style()
+            # Waves best subset grouped by mode
+            best = self.data[(self.data['wave-pause']==70)&(self.data['wave-duration']==200)]
+            waves_success = best.groupby('site_selection_mode')['battle_outcome']\
+                                 .apply(lambda x: (x=='Victory').mean()*100)
+            # Load and standardize uniform data (skiprows=6 for correct parsing)
+            uni = pd.read_csv(self.uniform_file, skiprows=6)
+            uni.rename(columns={
+                'site-selection-mode':'site_selection_mode',
+                'battle-outcome':'battle_outcome'
+            }, inplace=True)
+            uniform_success = uni.groupby('site_selection_mode')['battle_outcome']\
+                                  .apply(lambda x: (x=='Victory').mean()*100)
+            # Combine all unique modes and sort as strings (not float)
+            modes = sorted(set(waves_success.index).union(uniform_success.index), key=str)
+            x = np.arange(len(modes))
+            width = 0.35
+            fig, ax = plt.subplots(figsize=(12,6))
+            ax.bar(x-width/2, [waves_success.get(m,0) for m in modes], width, label='Waves')
+            ax.bar(x+width/2, [uniform_success.get(m,0) for m in modes], width, label='Uniform')
+            ax.set_xticks(x)
+            ax.set_xticklabels(modes, rotation=45)
+            ax.set_ylabel('Success Rate (%)')
+            ax.set_title('Waves vs Uniform Success Rate by Site Selection Mode (pause=70,duration=200)')
+            ax.legend()
+            plt.tight_layout()
+            out = os.path.join(self.output_dir, 'Waves_vs_Uniform_by_Mode.png')
+            plt.savefig(out, dpi=300)
+            print(f'Saved by-mode comparison chart to {out}')
+        except Exception as e:
+            print(f'Error drawing by-mode comparison: {e}')
+
+    def _create_success_threshold_comparison(self):
+        """Creates heatmaps showing success rate extremes by strategy performance categories."""
+        try:
+            self._set_plot_style()
+            # Determine high and low performance strategies
+            win_rates = self.statistics['win_rate']
+            sorted_modes = sorted(win_rates.items(), key=lambda x: x[1])
+            half = len(sorted_modes) // 2
+            low = [m for m,_ in sorted_modes[:half]]
+            high = [m for m,_ in sorted_modes[-half:]]
+            pauses = sorted(self.data['wave-pause'].unique())
+            durations = sorted(self.data['wave-duration'].unique())
+            high_mat = np.zeros((len(pauses), len(durations)))
+            low_mat  = np.zeros_like(high_mat)
+            for i,p in enumerate(pauses):
+                for j,d in enumerate(durations):
+                    df_h = self.data[(self.data['wave-pause']==p)&(self.data['wave-duration']==d)&self.data['site_selection_mode'].isin(high)]
+                    df_l = self.data[(self.data['wave-pause']==p)&(self.data['wave-duration']==d)&self.data['site_selection_mode'].isin(low)]
+                    if len(df_h): high_mat[i,j] = (df_h['battle_outcome']=='Victory').mean()*100
+                    if len(df_l): low_mat[i,j]  = (df_l['battle_outcome']=='Victory').mean()*100
+            # Plot heatmaps side by side
+            fig,(ax1,ax2)=plt.subplots(1,2,figsize=(16,6))
+            im1=ax1.imshow(high_mat,cmap='YlGn',vmin=0,vmax=100,aspect='auto')
+            ax1.set_title('High-Performance Strategies')
+            ax1.set_xticks(range(len(durations))); ax1.set_xticklabels(durations)
+            ax1.set_yticks(range(len(pauses)));    ax1.set_yticklabels(pauses)
+            fig.colorbar(im1,ax=ax1,label='Success Rate (%)')
+            im2=ax2.imshow(low_mat,cmap='YlOrRd',vmin=0,vmax=100,aspect='auto')
+            ax2.set_title('Low-Performance Strategies')
+            ax2.set_xticks(range(len(durations))); ax2.set_xticklabels(durations)
+            ax2.set_yticks(range(len(pauses)));    ax2.set_yticklabels(pauses)
+            fig.colorbar(im2,ax=ax2,label='Success Rate (%)')
+            plt.suptitle('Success by Strategy Performance')
+            plt.tight_layout()
+            out=os.path.join(self.output_dir,'Success_Strategy_Comparison.png')
+            plt.savefig(out,dpi=300)
+            print(f'Saved strategy comparison heatmap to {out}')
+        except Exception as e:
+            print(f"Error drawing strategy comparison: {e}")
+
+class UniformDataAnalyzer:
+    def __init__(self, script_dir=None):
+        if script_dir is None:
+            self.script_dir = os.path.dirname(os.path.abspath(__file__))
+        else:
+            self.script_dir = script_dir
+        self.output_dir = os.path.join(self.script_dir, "Uniform - with Artillery")
+        if not os.path.exists(self.output_dir):
+            print(f"Warning: Output directory '{self.output_dir}' does not exist.")
+            print(f"Current directory: {os.getcwd()}")
+            print(f"Available directories: {[d for d in os.listdir(self.script_dir) if os.path.isdir(os.path.join(self.script_dir, d))]}")
+        self.data = None
+        self.statistics = {}
+
+    def preprocess_csv_files(self, file1=None):
+        if file1 is None:
+            csv_files = []
+            if os.path.exists(self.output_dir):
+                for f in os.listdir(self.output_dir):
+                    if f.endswith('-table.csv'):
+                        csv_files.append(f)
+            if csv_files:
+                print(f"Available table CSV files in {self.output_dir}:")
+                for i, csv_file in enumerate(csv_files, 1):
+                    print(f"{i}. {csv_file}")
+                file1 = os.path.join(self.output_dir, csv_files[0])
+                print(f"Using file: {file1}")
+            else:
+                file1 = os.path.join(self.output_dir, "IrpinModel Vary Site-Selection Artillery Active-table.csv")
+                print(f"No table CSV files found, attempting to use default: {file1}")
+        print("Starting CSV file preprocessing.")
+        try:
+            T = pd.read_csv(file1, skiprows=6)
+            print("File successfully loaded.")
+            print("\nActual columns in the loaded CSV:")
+            print(T.columns.tolist())
+        except Exception as e:
+            print(f"Error reading CSV file: {e}")
+            self._inspect_csv_files([file1])
+            return False
+        T = self._standardize_column_names(T)
+        self.data = T
+        print("----- Preprocessed Data (Head) -----")
+        print(self.data.head())
+        required_columns = ['site_selection_mode', 'battle_outcome', 'total_infantry_casualties_10', 'total_infantry_used', 'total_infantry_crossed']
+        missing_columns = [col for col in required_columns if col not in self.data.columns]
+        if missing_columns:
+            print(f"Warning: Missing required columns: {missing_columns}")
+            print("Available columns:", self.data.columns.tolist())
+            return False
+        return True
+
+    def _standardize_column_names(self, T):
+        mapping = {
+            'total-infantry-casualties / 10': 'total_infantry_casualties_10',
+            'total-infantry-crossed': 'total_infantry_crossed',
+            'total-infantry-used': 'total_infantry_used',
+            'total-pontoons-used': 'total_pontoons_used',
+            'site-selection-mode': 'site_selection_mode',
+            'battle-outcome': 'battle_outcome'
+        }
+        mapping_to_use = {k: v for k, v in mapping.items() if k in T.columns}
+        if not mapping_to_use:
+            print("Warning: None of the expected columns found for renaming.")
+        return T.rename(columns=mapping_to_use)
+
+    def _inspect_csv_files(self, file_paths):
+        for i, file_path in enumerate(file_paths, 1):
+            try:
+                print(f"\nFile {i} content check:")
+                for skip in [0, 1, 6]:
+                    print(f"\nTrying with skiprows={skip}:")
+                    try:
+                        df = pd.read_csv(file_path, skiprows=skip, nrows=5)
+                        print(f"First {min(5, len(df))} rows:")
+                        print(df.head())
+                        print("\nColumns:")
+                        print(df.columns.tolist())
+                    except Exception as e:
+                        print(f"Failed with skiprows={skip}: {e}")
+                print("\nRaw file content (first 10 lines):")
+                with open(file_path, 'r', encoding='utf-8') as f:
+                    for j, line in enumerate(f):
+                        if j < 10:
+                            print(f"Line {j+1}: {line.strip()}")
+                        else:
+                            break
+            except Exception as e:
+                print(f"Failed to read file {i}: {e}")
+
+    def calculate_statistics(self):
+        if self.data is None:
+            print("Data not loaded. Please run preprocess_csv_files() first.")
+            return False
+        print("Calculating basic statistics...")
+        required_columns = ['site_selection_mode', 'battle_outcome', 'total_infantry_casualties_10', 'total_infantry_used']
+        missing_columns = [col for col in required_columns if col not in self.data.columns]
+        if missing_columns:
+            print(f"Error: Missing required columns for statistics calculation: {missing_columns}")
+            return False
+        site_modes = self.data['site_selection_mode'].unique()
+        battle_outcomes = self.data['battle_outcome'].unique()
+        if len(site_modes) == 0:
+            print("Warning: No unique site selection modes found")
+            return False
+        print(f"Found site selection modes: {site_modes}")
+        print(f"Found battle outcomes: {battle_outcomes}")
+        win_rate = {}
+        for mode in site_modes:
+            idx = self.data['site_selection_mode'] == mode
+            if idx.sum() > 0:
+                victories = self.data[idx]['battle_outcome'] == 'Victory'
+                win_rate[mode] = (victories.sum() / idx.sum()) * 100
+            else:
+                win_rate[mode] = 0
+        casualty_rate = {}
+        for mode in site_modes:
+            idx = self.data['site_selection_mode'] == mode
+            if idx.sum() > 0:
+                total_casualties = self.data.loc[idx, 'total_infantry_casualties_10'].sum()
+                total_used = self.data.loc[idx, 'total_infantry_used'].sum()
+                if total_used > 0:
+                    casualty_rate[mode] = (total_casualties / total_used) * 100
+                else:
+                    casualty_rate[mode] = 0
+            else:
+                casualty_rate[mode] = 0
+        row_casualty_rate = (self.data['total_infantry_casualties_10'] / self.data['total_infantry_used']) * 100
+        self.statistics = {
+            'site_modes': site_modes,
+            'battle_outcomes': battle_outcomes,
+            'win_rate': win_rate,
+            'casualty_rate': casualty_rate,
+            'row_casualty_rate': row_casualty_rate
+        }
+        print("Basic statistics calculation completed.")
+        return True
 
 def main():
     """Main function."""
@@ -803,9 +828,11 @@ def main():
     # Instantiate the analysis class
     analyzer = IrpinDataAnalyzer()
     
-    # Step 1: Load CSV files and preprocess data
-    if analyzer.preprocess_csv_files():
-        # Step 2: Calculate statistical information
+    # Step 1: Load the combined data
+    analyzer.load_data()
+    
+    # Step 2: Calculate statistical information
+    if analyzer.data is not None:
         analyzer.calculate_statistics()
         
         # Step 3: Generate visualizations
