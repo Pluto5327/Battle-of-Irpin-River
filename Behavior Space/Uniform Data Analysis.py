@@ -82,12 +82,12 @@ class IrpinDataAnalyzer:
         return True
 
     def _standardize_column_names(self, T):
-        # Original mapping
+        # Updated mapping to match actual column names in the CSV file
         mapping = {
-            'total-infantry-casualties / 10': 'total_infantry_casualties_10',
-            'total-infantry-crossed': 'total_infantry_crossed',
-            'total-infantry-used': 'total_infantry_used',
-            'total-pontoons-used': 'total_pontoons_used',
+            'infantry-casualties': 'total_infantry_casualties_10',
+            'infantry-crossed': 'total_infantry_crossed',
+            'infantry-used': 'total_infantry_used',
+            'pontoons-used': 'total_pontoons_used',
             'site-selection-mode': 'site_selection_mode',
             'battle-outcome': 'battle_outcome'
         }

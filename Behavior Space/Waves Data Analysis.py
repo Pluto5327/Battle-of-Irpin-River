@@ -844,7 +844,7 @@ class IrpinDataAnalyzer:
                     
                     # Create scatter plot
                     scatter = ax.scatter(x_data, y_data, z_data, c=colors, 
-                                        s=100, marker='o', alpha=0.8, edgecolor='black')
+                                        s=400, marker='o', alpha=0.8, edgecolor='black')
                     
                     # Add colorbar
                     cbar = fig.colorbar(plt.cm.ScalarMappable(norm=norm, cmap=metric_info['cmap']), 
