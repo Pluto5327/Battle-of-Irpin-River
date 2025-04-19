@@ -4,7 +4,7 @@
 "04/19/2025 01:43:24:609 -0400"
 "min-pxcor","max-pxcor","min-pycor","max-pycor"
 "0","459","0","624"
-"[run number]","turn-on-artillery?","turn-on-stop-conditions?","spacing-mode","site-selection-mode","[step]","battle-outcome","total-infantry-crossed","total-infantry-casualties / 10","total-infantry-used","total-pontoons-used","ticks"
+"[run number]","turn-on-artillery?","turn-on-stop-conditions?","spacing-mode","site-selection-mode","[step]","battle-outcome","infantry-crossed","infantry-casualties","infantry-used","pontoons-used","ticks"
 "1","true","true","Uniform","01 Shortest Bridges","9780","Retreat","400","4510","5620","27910","9780"
 "11","true","true","Uniform","01 Shortest Bridges","9440","Retreat","0","4510","5510","26980","9440"
 "7","true","true","Uniform","01 Shortest Bridges","9620","Retreat","0","4510","5550","27590","9620"
