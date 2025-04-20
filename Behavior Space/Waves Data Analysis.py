@@ -803,135 +803,378 @@ class IrpinDataAnalyzer:
             # Create numerical mapping for site selection modes
             mode_to_num = {mode: i for i, mode in enumerate(site_modes)}
             
-            # Define metrics to analyze with functions and color maps
+            # Define metrics to analyze
             metrics = {
                 'Win Rate': {'func': lambda df: (df['battle_outcome'] == 'Victory').mean() * 100, 'cmap': 'YlGn'},
-                'Casualty Rate': {'func': lambda df: (df['total_infantry_casualties_10'].sum() / df['total_infantry_used'].sum()) * 100 
-                                  if df['total_infantry_used'].sum() > 0 else 0, 'cmap': 'YlOrRd'},
+                'Casualty Rate': {'func': lambda df: (df['total_infantry_casualties_10'].sum() / df['total_infantry_used'].sum()) * 100 if df['total_infantry_used'].sum() > 0 else 0, 'cmap': 'YlOrRd'},
                 'Troops Used': {'func': lambda df: df['total_infantry_used'].mean(), 'cmap': 'Blues'},
                 'Pontoons Used': {'func': lambda df: df['total_pontoons_used'].mean(), 'cmap': 'Purples'},
                 'Battle Duration': {'func': lambda df: df['ticks'].mean(), 'cmap': 'Oranges'}
             }
             
-            # Calculate all data points once to avoid redundant calculations
-            grid_data = self._calculate_3d_grid_data(site_modes, wave_pauses, wave_durations, metrics)
-            
-            # Create a separate plot for each metric
+            # Create one figure per metric
             for metric_name, metric_info in metrics.items():
-                self._create_single_3d_metric_plot(metric_name, metric_info, grid_data, mode_to_num)
+                fig = plt.figure(figsize=(16, 12))
+                ax = fig.add_subplot(111, projection='3d')
                 
+                # Prepare data for scatter plot
+                x_data, y_data, z_data, values = [], [], [], []
+                
+                # For each combination of parameters, calculate metric value
+                for mode in site_modes:
+                    for pause in wave_pauses:
+                        for duration in wave_durations:
+                            mask = ((self.data['site_selection_mode'] == mode) & 
+                                    (self.data['wave-pause'] == pause) & 
+                                    (self.data['wave-duration'] == duration))
+                            
+                            subset_data = self.data[mask]
+                            
+                            if len(subset_data) > 0:
+                                x_data.append(pause)
+                                y_data.append(duration)
+                                z_data.append(mode_to_num[mode])
+                                values.append(metric_info['func'](subset_data))
+                
+                # Normalize values for coloring
+                if values:
+                    norm = plt.Normalize(min(values), max(values))
+                    colors = plt.cm.get_cmap(metric_info['cmap'])(norm(values))
+                    
+                    # Create scatter plot
+                    scatter = ax.scatter(x_data, y_data, z_data, c=colors, 
+                                        s=400, marker='o', alpha=0.8, edgecolor='black')
+                    
+                    # Add colorbar
+                    cbar = fig.colorbar(plt.cm.ScalarMappable(norm=norm, cmap=metric_info['cmap']), 
+                                       ax=ax, pad=0.1, shrink=0.7)
+                    cbar.set_label(metric_name, fontsize=14, fontweight='bold')
+                    
+                    # Set labels and title
+                    ax.set_xlabel('Wave Pause', fontsize=14, fontweight='bold', labelpad=10)
+                    ax.set_ylabel('Wave Duration', fontsize=14, fontweight='bold', labelpad=10)
+                    ax.set_zlabel('Site Selection Strategy', fontsize=14, fontweight='bold', labelpad=10)
+                    ax.set_title(f'3D Comparison of {metric_name}', fontsize=16, fontweight='bold', pad=20)
+                    
+                    # Set z-axis ticks to use site selection mode names
+                    ax.set_zticks(list(mode_to_num.values()))
+                    ax.set_zticklabels(list(mode_to_num.keys()), rotation=30)
+                    
+                    # Adjust view angle
+                    ax.view_init(elev=30, azim=45)
+                    
+                    plt.tight_layout()
+                    
+                    # Save figure
+                    out_path = os.path.join(self.output_dir, f"3D_{metric_name.replace(' ', '_')}_Comparison.png")
+                    plt.savefig(out_path, dpi=300, bbox_inches='tight')
+                    print(f'3D {metric_name} comparison saved to "{out_path}".')
+                    
+                plt.close(fig)
+            
         except Exception as e:
             print(f"An error occurred while creating 3D metrics comparisons: {e}")
-            import traceback
-            print(traceback.format_exc())
     
-    def _calculate_3d_grid_data(self, site_modes, wave_pauses, wave_durations, metrics):
-        """Calculates all data points for 3D visualizations.
-        
-        Args:
-            site_modes: List of site selection modes
-            wave_pauses: List of wave pause values
-            wave_durations: List of wave duration values
-            metrics: Dictionary of metrics with their calculation functions
+    def _create_uniform_vs_waves_metrics_comparison(self):
+        """Creates multiple bar charts comparing Waves (pause=70, duration=200) vs Uniform across various metrics."""
+        try:
+            # Set plot style
+            self._set_plot_style()
             
-        Returns:
-            Dictionary containing calculated values for each parameter combination
-        """
-        # Initialize results dictionary
-        grid_data = {}
-        
-        # Group data by the three parameters to avoid redundant filtering
-        grouped = self.data.groupby(['site_selection_mode', 'wave-pause', 'wave-duration'])
-        
-        # For each parameter combination, calculate all metrics
-        for (mode, pause, duration), group in grouped:
-            if len(group) > 0:  # Ensure we have data for this combination
-                key = (mode, pause, duration)
-                grid_data[key] = {
-                    'x': pause,                    # Wave pause (x-axis)
-                    'y': duration,                 # Wave duration (y-axis)
-                    'z': mode,                     # Site selection mode (z-axis)
-                    'values': {}                   # Will hold values for each metric
+            # Filter waves data for the specific parameters
+            best_waves = self.data[(self.data['wave-pause']==70) & (self.data['wave-duration']==200)]
+            
+            # Load uniform data - try different methods to handle various data formats
+            try:
+                # First, check the first few lines to understand the format
+                with open(self.uniform_file, 'r') as f:
+                    first_lines = [next(f) for _ in range(10)]
+                    print("First lines of Uniform data file:")
+                    for i, line in enumerate(first_lines):
+                        print(f"{i}: {line.strip()}")
+                
+                # skiprows=6 is common, but may need adjustment based on file format
+                uni = pd.read_csv(self.uniform_file, skiprows=6)
+                print("Available columns (Original Uniform data):", uni.columns.tolist())
+                
+                # Define all possible mappings from existing column names to standardized names
+                column_mapping = {
+                    # Standard names for site selection mode and battle outcome
+                    'site-selection-mode': 'site_selection_mode',
+                    'battle-outcome': 'battle_outcome',
+                    
+                    # Troops and pontoon data - various possible names
+                    'total-infantry-used': 'total_infantry_used',
+                    'infantry-used': 'total_infantry_used',
+                    'infantry used': 'total_infantry_used',
+                    
+                    'total-infantry-casualties / 10': 'total_infantry_casualties_10',
+                    'infantry-casualties': 'total_infantry_casualties_10',
+                    'infantry casualties': 'total_infantry_casualties_10',
+                    
+                    'total-infantry-crossed': 'total_infantry_crossed',
+                    'infantry-crossed': 'total_infantry_crossed',
+                    'infantry crossed': 'total_infantry_crossed',
+                    
+                    'total-pontoons-used': 'total_pontoons_used',
+                    'pontoons-used': 'total_pontoons_used',
+                    'pontoons used': 'total_pontoons_used',
+                    
+                    # Time-related columns
+                    '[step]': 'ticks',
+                    'step': 'ticks',
+                    'ticks': 'ticks'
                 }
                 
-                # Calculate each metric for this parameter combination
-                for metric_name, metric_info in metrics.items():
-                    try:
-                        grid_data[key]['values'][metric_name] = metric_info['func'](group)
-                    except Exception as e:
-                        print(f"Error calculating {metric_name} for {key}: {e}")
-                        grid_data[key]['values'][metric_name] = 0
-        
-        return grid_data
-    
-    def _create_single_3d_metric_plot(self, metric_name, metric_info, grid_data, mode_to_num):
-        """Creates a single 3D plot for a specific metric.
-        
-        Args:
-            metric_name: Name of the metric to visualize
-            metric_info: Dictionary with function and colormap for the metric
-            grid_data: Pre-calculated data points
-            mode_to_num: Dictionary mapping site selection modes to numerical indices
-        """
-        # Extract data for this specific metric
-        x_data, y_data, z_data, values = [], [], [], []
-        
-        for key, data in grid_data.items():
-            if metric_name in data['values']:
-                x_data.append(data['x'])
-                y_data.append(data['y'])
-                z_data.append(mode_to_num[data['z']])
-                values.append(data['values'][metric_name])
-        
-        # Create plot if we have data
-        if not values:
-            print(f"No data available for metric: {metric_name}")
-            return
+                # Compare column names case-insensitively
+                lowercase_cols = {col.lower(): col for col in uni.columns}
+                
+                # Create a new mapping
+                new_mapping = {}
+                for original, target in column_mapping.items():
+                    if original in uni.columns:  # Direct match
+                        new_mapping[original] = target
+                    elif original.lower() in lowercase_cols:  # Case-insensitive match
+                        actual_col = lowercase_cols[original.lower()]
+                        new_mapping[actual_col] = target
+                
+                if new_mapping:
+                    uni = uni.rename(columns=new_mapping)
+                    print("Column names after renaming (Uniform):", uni.columns.tolist())
+                else:
+                    print("Warning: No matching column mappings found. Keeping original column names.")
+                    
+                    # If no mappings found, try to guess based on column name content
+                    cols = uni.columns.tolist()
+                    # Guess site selection mode
+                    site_mode_candidates = [c for c in cols if 'site' in c.lower() or 'mode' in c.lower() or 'select' in c.lower()]
+                    if site_mode_candidates:
+                        uni = uni.rename(columns={site_mode_candidates[0]: 'site_selection_mode'})
+                    
+                    # Guess battle outcome
+                    outcome_candidates = [c for c in cols if 'outcome' in c.lower() or 'battle' in c.lower() or 'result' in c.lower()]
+                    if outcome_candidates:
+                        uni = uni.rename(columns={outcome_candidates[0]: 'battle_outcome'})
+                    
+                    print("Column names after guess-based renaming:", uni.columns.tolist())
             
-        # Create figure and 3D axes
-        fig = plt.figure(figsize=(16, 12))
-        ax = fig.add_subplot(111, projection='3d')
-        
-        # Normalize values for coloring
-        norm = plt.Normalize(min(values), max(values))
-        colors = plt.cm.get_cmap(metric_info['cmap'])(norm(values))
-        
-        # Create scatter plot with size proportional to value importance
-        sizes = np.array(values)
-        sizes = 200 + 300 * (sizes - min(sizes)) / (max(sizes) - min(sizes)) if max(sizes) > min(sizes) else 400
-        
-        scatter = ax.scatter(x_data, y_data, z_data, c=colors, 
-                            s=sizes, marker='o', alpha=0.8, edgecolor='black', linewidth=0.5)
-        
-        # Add colorbar
-        cbar = fig.colorbar(plt.cm.ScalarMappable(norm=norm, cmap=metric_info['cmap']), 
-                           ax=ax, pad=0.1, shrink=0.7)
-        cbar.set_label(metric_name, fontsize=14, fontweight='bold')
-        
-        # Set labels and title
-        ax.set_xlabel('Wave Pause', fontsize=14, fontweight='bold', labelpad=10)
-        ax.set_ylabel('Wave Duration', fontsize=14, fontweight='bold', labelpad=10)
-        ax.set_zlabel('Site Selection Strategy', fontsize=14, fontweight='bold', labelpad=10)
-        ax.set_title(f'3D Comparison of {metric_name}', fontsize=16, fontweight='bold', pad=20)
-        
-        # Set z-axis ticks to use site selection mode names
-        modes = list(mode_to_num.keys())
-        ax.set_zticks(range(len(modes)))
-        ax.set_zticklabels(modes, rotation=30)
-        
-        # Add grid and adjust view angle
-        ax.grid(True, linestyle='--', alpha=0.7)
-        ax.view_init(elev=30, azim=45)
-        
-        plt.tight_layout()
-        
-        # Save figure with a descriptive filename
-        safe_metric_name = metric_name.replace(' ', '_')
-        out_path = os.path.join(self.output_dir, f"3D_{safe_metric_name}_Comparison.png")
-        plt.savefig(out_path, dpi=300, bbox_inches='tight')
-        print(f'3D {metric_name} comparison saved to "{out_path}".')
-        
-        plt.close(fig)
+            except Exception as e:
+                print(f"Error loading uniform data: {e}")
+                # Try loading the file in a different way
+                try:
+                    uni = pd.read_csv(self.uniform_file, skiprows=0)  # No header row
+                    print("Columns with skiprows=0:", uni.columns.tolist())
+                except Exception as e2:
+                    print(f"Alternative loading also failed: {e2}")
+                    return
+            
+            # Fix potential duplicate column names (ticks appears twice in some cases)
+            if uni.columns.duplicated().any():
+                print("Warning: Duplicate column names found in uniform data")
+                # Create a new list of column names, making duplicates unique
+                new_cols = []
+                seen = set()
+                for col in uni.columns:
+                    if col in seen:
+                        counter = 1
+                        while f"{col}_{counter}" in seen:
+                            counter += 1
+                        new_cols.append(f"{col}_{counter}")
+                    else:
+                        new_cols.append(col)
+                    seen.add(col if col not in seen else f"{col}_{counter}")
+                uni.columns = new_cols
+                print("Columns after fixing duplicates:", uni.columns.tolist())
+            
+            # Check for required columns
+            if 'site_selection_mode' not in uni.columns or 'battle_outcome' not in uni.columns:
+                print("Warning: Required columns not found in Uniform data. Available columns:", uni.columns.tolist())
+                # Try provisional column assignment
+                if len(uni.columns) >= 3 and 'site_selection_mode' not in uni.columns:
+                    print(f"Provisionally using column {uni.columns[2]} as site_selection_mode")
+                    uni = uni.rename(columns={uni.columns[2]: 'site_selection_mode'})
+                
+                if len(uni.columns) >= 4 and 'battle_outcome' not in uni.columns:
+                    print(f"Provisionally using column {uni.columns[3]} as battle_outcome")
+                    uni = uni.rename(columns={uni.columns[3]: 'battle_outcome'})
+            
+            # Define metrics to compare - start with just the basic Success Rate that's guaranteed
+            metrics = [
+                {
+                    'name': 'Success Rate (%)',
+                    'waves_func': lambda df: (df['battle_outcome'] == 'Victory').mean() * 100,
+                    'uni_func': lambda df: (df['battle_outcome'] == 'Victory').mean() * 100,
+                    'format': '{:.1f}%'
+                }
+            ]
+            
+            # Add additional metrics based on available columns
+            for col_name, friendly_name, format_str in [
+                ('total_infantry_casualties_10', 'Casualty Rate (%)', '{:.1f}%'),
+                ('total_infantry_used', 'Troops Used', '{:.0f}'),
+                ('total_pontoons_used', 'Pontoons Used', '{:.1f}'),
+                ('ticks', 'Battle Duration (ticks)', '{:.0f}')
+            ]:
+                # Check if column exists in both datasets
+                waves_has_col = col_name in best_waves.columns
+                uni_has_col = col_name in uni.columns
+                
+                if waves_has_col and uni_has_col:
+                    if col_name == 'total_infantry_casualties_10' and 'total_infantry_used' in best_waves.columns and 'total_infantry_used' in uni.columns:
+                        # Special calculation for casualty rate
+                        metrics.append({
+                            'name': friendly_name,
+                            'waves_func': lambda df: (df['total_infantry_casualties_10'].sum() / df['total_infantry_used'].sum()) * 100 if df['total_infantry_used'].sum() > 0 else 0,
+                            'uni_func': lambda df: (df['total_infantry_casualties_10'].sum() / df['total_infantry_used'].sum()) * 100 if df['total_infantry_used'].sum() > 0 else 0,
+                            'format': format_str
+                        })
+                    else:
+                        # Normal mean calculation
+                        metrics.append({
+                            'name': friendly_name,
+                            'waves_func': lambda df, col=col_name: df[col].mean(),
+                            'uni_func': lambda df, col=col_name: df[col].mean(),
+                            'format': format_str
+                        })
+            
+            # Pontoon efficiency metric (only if required columns exist in both datasets)
+            if all(col in best_waves.columns for col in ['total_infantry_crossed', 'total_pontoons_used']) and \
+               all(col in uni.columns for col in ['total_infantry_crossed', 'total_pontoons_used']):
+                metrics.append({
+                    'name': 'Pontoon Efficiency (troops/pontoon)',
+                    'waves_func': lambda df: (df['total_infantry_crossed'].mean() / df['total_pontoons_used'].mean()) if df['total_pontoons_used'].mean() > 0 else 0,
+                    'uni_func': lambda df: (df['total_infantry_crossed'].mean() / df['total_pontoons_used'].mean()) if df['total_pontoons_used'].mean() > 0 else 0,
+                    'format': '{:.1f}'
+                })
+            
+            # Identify common modes
+            all_modes = sorted(set(best_waves['site_selection_mode'].unique()).union(
+                              set(uni['site_selection_mode'].unique())), key=str)
+            
+            # Create a chart for each metric
+            for metric in metrics:
+                fig, ax = plt.subplots(figsize=(14, 8))
+                
+                # Calculate values for each mode
+                waves_values = []
+                uni_values = []
+                
+                for mode in all_modes:
+                    # Waves data
+                    waves_mode_data = best_waves[best_waves['site_selection_mode'] == mode]
+                    if len(waves_mode_data) > 0:
+                        try:
+                            value = metric['waves_func'](waves_mode_data)
+                            # Ensure value is scalar
+                            if hasattr(value, 'shape'):
+                                print(f"Warning: Non-scalar value for waves mode {mode}, metric {metric['name']}: shape {value.shape}")
+                                value = float(value) if value.size == 1 else value[0] if value.size > 0 else 0
+                            waves_values.append(value)
+                        except Exception as e:
+                            print(f"Error calculating {metric['name']} for waves mode {mode}: {e}")
+                            waves_values.append(0)
+                    else:
+                        waves_values.append(0)
+                    
+                    # Uniform data
+                    uni_mode_data = uni[uni['site_selection_mode'] == mode]
+                    if len(uni_mode_data) > 0:
+                        try:
+                            value = metric['uni_func'](uni_mode_data)
+                            # Ensure value is scalar
+                            if hasattr(value, 'shape'):
+                                print(f"Warning: Non-scalar value for uniform mode {mode}, metric {metric['name']}: shape {value.shape}")
+                                value = float(value) if value.size == 1 else value[0] if value.size > 0 else 0
+                            uni_values.append(value)
+                        except Exception as e:
+                            print(f"Error calculating {metric['name']} for uniform mode {mode}: {e}")
+                            uni_values.append(0)
+                    else:
+                        uni_values.append(0)
+                
+                # Verify arrays have the correct shape
+                print(f"Diagnostic for {metric['name']}: waves_values shape {np.array(waves_values).shape}, uni_values shape {np.array(uni_values).shape}")
+                
+                # Ensure both arrays are 1D with same length
+                waves_values = np.array(waves_values).flatten()
+                uni_values = np.array(uni_values).flatten()
+                
+                if len(waves_values) != len(all_modes) or len(uni_values) != len(all_modes):
+                    print(f"Error: Value arrays length mismatch for {metric['name']}: waves {len(waves_values)}, uni {len(uni_values)}, modes {len(all_modes)}")
+                    waves_values = waves_values[:len(all_modes)] if len(waves_values) > len(all_modes) else np.pad(waves_values, (0, len(all_modes) - len(waves_values)))
+                    uni_values = uni_values[:len(all_modes)] if len(uni_values) > len(all_modes) else np.pad(uni_values, (0, len(all_modes) - len(uni_values)))
+                
+                # Create bar chart
+                x = np.arange(len(all_modes))
+                width = 0.35
+                
+                try:
+                    waves_bars = ax.bar(x - width/2, waves_values, width, label='Waves (p=70, d=200)', 
+                                      color='#3498db', edgecolor='black', linewidth=0.8)
+                    uni_bars = ax.bar(x + width/2, uni_values, width, label='Uniform', 
+                                     color='#e74c3c', edgecolor='black', linewidth=0.8)
+                except Exception as e:
+                    print(f"Error creating bars for {metric['name']}: {e}")
+                    print(f"waves_values: {waves_values}")
+                    print(f"uni_values: {uni_values}")
+                    continue  # Skip to next metric
+                
+                # Add value labels
+                for bar, value in zip(waves_bars, waves_values):
+                    height = bar.get_height()
+                    if height > 0:  # Only show label if value is greater than zero
+                        ax.annotate(metric['format'].format(value),
+                                   xy=(bar.get_x() + bar.get_width()/2, height),
+                                   xytext=(0, 3),  # 3 points vertical offset
+                                   textcoords="offset points",
+                                   ha='center', va='bottom', fontsize=9)
+                
+                for bar, value in zip(uni_bars, uni_values):
+                    height = bar.get_height()
+                    if height > 0:  # Only show label if value is greater than zero
+                        ax.annotate(metric['format'].format(value),
+                                   xy=(bar.get_x() + bar.get_width()/2, height),
+                                   xytext=(0, 3),  # 3 points vertical offset
+                                   textcoords="offset points",
+                                   ha='center', va='bottom', fontsize=9)
+                
+                # Set chart properties
+                ax.set_xlabel('Site Selection Strategy', fontsize=14, fontweight='bold')
+                ax.set_ylabel(metric['name'], fontsize=14, fontweight='bold')
+                ax.set_title(f'Waves vs Uniform: {metric["name"]} by Site Selection Mode', 
+                            fontsize=16, fontweight='bold', pad=20)
+                ax.set_xticks(x)
+                ax.set_xticklabels(all_modes, rotation=45, ha='right')
+                ax.legend(fontsize=12)
+                
+                # Add grid lines
+                ax.grid(axis='y', linestyle='--', alpha=0.7)
+                
+                plt.tight_layout()
+                
+                # Generate safe filename
+                safe_name = metric['name'].replace(' ', '_').replace('(', '').replace(')', '')
+                safe_name = safe_name.replace('%', 'pct').replace('/', 'per')
+                out_path = os.path.join(self.output_dir, f"Waves_vs_Uniform_{safe_name}.png")
+                try:
+                    plt.savefig(out_path, dpi=300, bbox_inches='tight')
+                    print(f'Waves vs Uniform {metric["name"]} comparison saved to "{out_path}".')
+                except Exception as e:
+                    print(f"Failed to save {metric['name']} graph: {e}")
+                    # Try backup filename
+                    backup_path = os.path.join(self.output_dir, f"Waves_vs_Uniform_Metric_{metrics.index(metric)}.png")
+                    try:
+                        plt.savefig(backup_path, dpi=300, bbox_inches='tight')
+                        print(f'Saved with backup filename: "{backup_path}"')
+                    except Exception as e2:
+                        print(f"Backup save also failed: {e2}")
+                
+                plt.close(fig)
+            
+        except Exception as e:
+            import traceback
+            print(f"An error occurred while creating Waves vs Uniform comparison: {e}")
+            print(traceback.format_exc())  # Show detailed error trace
 
 def main():
     """Main function."""
