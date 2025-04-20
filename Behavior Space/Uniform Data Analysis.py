@@ -81,51 +81,85 @@ class IrpinDataAnalyzer:
             
         return True
 
-    def _standardize_column_names(self, T):
-        # Updated mapping to match actual column names in the CSV file
-        mapping = {
-            'infantry-casualties': 'total_infantry_casualties_10',
-            'infantry-crossed': 'total_infantry_crossed',
-            'infantry-used': 'total_infantry_used',
-            'pontoons-used': 'total_pontoons_used',
-            'site-selection-mode': 'site_selection_mode',
-            'battle-outcome': 'battle_outcome'
-        }
+    # Column name mapping dictionary defined as class variable
+    COLUMN_NAME_MAPPING = {
+        'infantry-casualties': 'total_infantry_casualties_10',
+        'infantry-crossed': 'total_infantry_crossed',
+        'infantry-used': 'total_infantry_used',
+        'pontoons-used': 'total_pontoons_used',
+        'site-selection-mode': 'site_selection_mode',
+        'battle-outcome': 'battle_outcome'
+    }
+
+    def _standardize_column_names(self, dataframe):
+        """Converts column names to standardized format.
         
-        # Apply renaming only for columns that exist
-        mapping_to_use = {k: v for k, v in mapping.items() if k in T.columns}
+        Args:
+            dataframe: The dataframe to standardize
+            
+        Returns:
+            A dataframe with standardized column names
+        """
+        # Apply mapping only to existing columns
+        original_columns = set(dataframe.columns)
+        mapping_to_use = {k: v for k, v in self.COLUMN_NAME_MAPPING.items() if k in original_columns}
         
         if not mapping_to_use:
-            print("Warning: None of the expected columns found for renaming.")
+            print("Warning: No expected column names found for mapping.")
+            return dataframe
+        
+        # Apply column name changes    
+        renamed_df = dataframe.rename(columns=mapping_to_use)
+        
+        # Log the changed column names
+        if mapping_to_use:
+            print(f"Converted column names: {list(mapping_to_use.items())}")
             
-        return T.rename(columns=mapping_to_use)
+        return renamed_df
 
     def _inspect_csv_files(self, file_paths):
+        """Inspects CSV files in detail.
+        
+        Args:
+            file_paths: List of CSV file paths to inspect
+        """
         for i, file_path in enumerate(file_paths, 1):
+            print(f"\nFile {i} content check: {file_path}")
+            
             try:
-                print(f"\nFile {i} content check:")
-                # Try to read with different skiprows values
-                for skip in [0, 1, 6]:
-                    print(f"\nTrying with skiprows={skip}:")
-                    try:
-                        df = pd.read_csv(file_path, skiprows=skip, nrows=5)
-                        print(f"First {min(5, len(df))} rows:")
-                        print(df.head())
-                        print("\nColumns:")
-                        print(df.columns.tolist())
-                    except Exception as e:
-                        print(f"Failed with skiprows={skip}: {e}")
+                # Display file contents
+                self._show_file_preview(file_path)
                 
-                # Also show raw file content
-                print("\nRaw file content (first 10 lines):")
-                with open(file_path, 'r', encoding='utf-8') as f:
-                    for j, line in enumerate(f):
-                        if j < 10:
-                            print(f"Line {j+1}: {line.strip()}")
-                        else:
-                            break
+                # Try reading with different skiprows settings
+                self._try_different_skiprows(file_path)
             except Exception as e:
-                print(f"Failed to read file {i}: {e}")
+                print(f"Failed to read file {i}: {str(e)}")
+    
+    def _show_file_preview(self, file_path, lines=10):
+        """Displays the first few lines of a file."""
+        try:
+            print(f"\nRaw file content (first {lines} lines):")
+            with open(file_path, 'r', encoding='utf-8') as f:
+                for j, line in enumerate(f):
+                    if j < lines:
+                        print(f"Line {j+1}: {line.strip()}")
+                    else:
+                        break
+        except Exception as e:
+            print(f"Failed to display file preview: {str(e)}")
+    
+    def _try_different_skiprows(self, file_path, skip_options=[0, 1, 6], rows=5):
+        """Attempts to read the file with different skiprows settings."""
+        for skip in skip_options:
+            print(f"\nTrying with skiprows={skip}:")
+            try:
+                df = pd.read_csv(file_path, skiprows=skip, nrows=rows)
+                print(f"First {min(rows, len(df))} rows:")
+                print(df.head())
+                print("\nColumns:")
+                print(df.columns.tolist())
+            except Exception as e:
+                print(f"Failed with skiprows={skip}: {str(e)}")
     
     def calculate_statistics(self):
         """Calculate basic statistical information (converted from MATLAB code)"""
@@ -325,8 +359,6 @@ class IrpinDataAnalyzer:
         output_file = os.path.join(self.output_dir, "Site_Selection_Boxplots.png")
         plt.savefig(output_file, dpi=300, bbox_inches='tight')
         print(f"Boxplots saved to {output_file}")
-        
-        plt.show()
     
     def create_combined_bar_chart(self):
         """Create a combined bar chart showing success ratio and casualty ratio by site selection mode"""
@@ -379,8 +411,6 @@ class IrpinDataAnalyzer:
         output_file = os.path.join(self.output_dir, "Site_Selection_Combined_Bar_Chart.png")
         plt.savefig(output_file, dpi=300, bbox_inches='tight')
         print(f"Combined bar chart saved to {output_file}")
-        
-        plt.show()
     
     def create_site_selection_comparison_plots(self):
         """Create bar and box plots for each metric by site selection mode"""
@@ -420,7 +450,7 @@ class IrpinDataAnalyzer:
             out_bar = os.path.join(self.output_dir, f"SiteSelection_vs_{col}_bar.png")
             plt.savefig(out_bar, dpi=300, bbox_inches='tight')
             print(f"Saved bar plot: {out_bar}")
-            plt.show()
+            plt.close()
 
             plt.figure(figsize=(14, 6))
             sns.boxplot(x='site_selection_mode', y=col, data=df, palette='viridis')
@@ -432,7 +462,7 @@ class IrpinDataAnalyzer:
             out_box = os.path.join(self.output_dir, f"SiteSelection_vs_{col}_box.png")
             plt.savefig(out_box, dpi=300, bbox_inches='tight')
             print(f"Saved boxplot: {out_box}")
-            plt.show()
+            plt.close()
 
     def create_individual_site_selection_plots(self):
         """Create individual bar and box plots for each metric by site selection mode"""
@@ -470,7 +500,7 @@ class IrpinDataAnalyzer:
             out_bar = os.path.join(self.output_dir, f"SiteSelection_vs_{col}_bar_individual.png")
             plt.savefig(out_bar, dpi=300, bbox_inches='tight')
             print(f"Saved bar plot: {out_bar}")
-            plt.show()
+            plt.close()
 
             # Box plot
             plt.figure(figsize=(10, 6))
@@ -483,7 +513,7 @@ class IrpinDataAnalyzer:
             out_box = os.path.join(self.output_dir, f"SiteSelection_vs_{col}_box_individual.png")
             plt.savefig(out_box, dpi=300, bbox_inches='tight')
             print(f"Saved boxplot: {out_box}")
-            plt.show()
+            plt.close()
 
     def create_visualizations(self):
         """Create all visualizations at once"""
